@@ -1,0 +1,18 @@
+{
+  "id": "u4",
+  "tier": "journeyman",
+  "name": "Finish the device",
+  "zone": { "w": 16, "h": 12 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 1, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 4, "r": 0 },
+    { "t": "hopper_cell", "x": 1, "y": 7, "r": 0 },
+    { "t": "hopper_case", "x": 1, "y": 10, "r": 0 },
+    { "t": "dock", "x": 14, "y": 5, "r": 0, "target": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 6 }
+  ],
+  "unlocked": ["belt", "saw", "press", "solder", "mounter", "encap", "merger", "bin"],
+  "target": { "item": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 6 },
+  "stars": { "time2": 600, "machines3": 30 },
+  "hint": "The last step: place the module into a housing. All four materials feed one finished device.",
+  "learn": "finishing a product"
+}

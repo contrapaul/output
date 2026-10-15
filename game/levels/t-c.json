@@ -1,0 +1,16 @@
+{
+  "id": "t-c",
+  "tier": "novice",
+  "name": "Join two parts",
+  "zone": { "w": 14, "h": 8 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 2, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 5, "r": 0 },
+    { "t": "dock", "x": 12, "y": 3, "r": 0, "target": "solder(copper_coil|silicon_die)", "amount": 10 }
+  ],
+  "unlocked": ["belt", "saw", "press", "solder"],
+  "target": { "item": "solder(copper_coil|silicon_die)", "amount": 10 },
+  "stars": { "time2": 300, "machines3": 18 },
+  "hint": "A board is a die and a coil, joined at the solder station. Both lines end at the solder station.",
+  "learn": "joining two parts"
+}

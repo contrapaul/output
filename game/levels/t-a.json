@@ -1,0 +1,15 @@
+{
+  "id": "t-a",
+  "tier": "novice",
+  "name": "Move the ingots",
+  "zone": { "w": 12, "h": 8 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 3, "r": 0 },
+    { "t": "dock", "x": 10, "y": 3, "r": 0, "target": "silicon_ingot", "amount": 10 }
+  ],
+  "unlocked": ["belt"],
+  "target": { "item": "silicon_ingot", "amount": 10 },
+  "stars": { "time2": 90, "machines3": 8 },
+  "hint": "Lay conveyor belts from the hopper to the dock. Press F to rotate a belt.",
+  "learn": "moving parts on a belt"
+}

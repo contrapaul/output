@@ -1,0 +1,18 @@
+{
+  "id": "u10",
+  "tier": "plant-manager",
+  "name": "Plant manager",
+  "zone": { "w": 16, "h": 16 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 1, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 5, "r": 0 },
+    { "t": "hopper_cell", "x": 1, "y": 9, "r": 0 },
+    { "t": "hopper_case", "x": 1, "y": 13, "r": 0 },
+    { "t": "dock", "x": 14, "y": 7, "r": 0, "target": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 20 }
+  ],
+  "unlocked": ["belt", "belt_high", "saw", "press", "solder", "mounter", "encap", "merger", "splitter", "bin", "recycler"],
+  "target": { "item": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 20 },
+  "stars": { "time2": 1800, "machines3": 50 },
+  "hint": "The biggest order yet: twenty devices. Split, store, and route. Nothing is wasted.",
+  "learn": "managing a full plant"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "u1",
+  "tier": "novice",
+  "name": "Refine in steps",
+  "zone": { "w": 14, "h": 8 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 3, "r": 0 },
+    { "t": "dock", "x": 12, "y": 3, "r": 0, "target": "silicon_die", "amount": 8 }
+  ],
+  "unlocked": ["belt", "saw"],
+  "target": { "item": "silicon_die", "amount": 8 },
+  "stars": { "time2": 180, "machines3": 10 },
+  "hint": "Two saws: the first cuts ingots to wafers, the second cuts wafers to dies.",
+  "learn": "a chain of machines"
+}

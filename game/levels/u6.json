@@ -1,0 +1,16 @@
+{
+  "id": "u6",
+  "tier": "journeyman",
+  "name": "Clean up mistakes",
+  "zone": { "w": 14, "h": 10 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 2, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 7, "r": 0 },
+    { "t": "dock", "x": 12, "y": 4, "r": 0, "target": "solder(copper_coil|silicon_die)", "amount": 6 }
+  ],
+  "unlocked": ["belt", "saw", "press", "solder", "bin", "recycler"],
+  "target": { "item": "solder(copper_coil|silicon_die)", "amount": 6 },
+  "stars": { "time2": 420, "machines3": 22 },
+  "hint": "Wrong parts block the dock and jam the line. The recycler removes parts so you can start clean.",
+  "learn": "clearing a jam without losing the line"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "u9",
+  "tier": "engineer",
+  "name": "Tight plant",
+  "zone": { "w": 14, "h": 14 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 1, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 5, "r": 0 },
+    { "t": "hopper_cell", "x": 1, "y": 9, "r": 0 },
+    { "t": "hopper_case", "x": 1, "y": 12, "r": 0 },
+    { "t": "dock", "x": 12, "y": 6, "r": 0, "target": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 12 }
+  ],
+  "unlocked": ["belt", "belt_high", "saw", "press", "solder", "mounter", "encap", "merger", "splitter", "bin", "recycler"],
+  "target": { "item": "encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))", "amount": 12 },
+  "stars": { "time2": 1200, "machines3": 40 },
+  "hint": "A full device factory in a tight room. Every machine you have can help.",
+  "learn": "planning a compact plant"
+}

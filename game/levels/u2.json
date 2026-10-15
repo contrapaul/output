@@ -1,0 +1,16 @@
+{
+  "id": "u2",
+  "tier": "novice",
+  "name": "Build a board",
+  "zone": { "w": 16, "h": 10 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 2, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 6, "r": 0 },
+    { "t": "dock", "x": 14, "y": 4, "r": 0, "target": "solder(copper_coil|silicon_die)", "amount": 10 }
+  ],
+  "unlocked": ["belt", "saw", "press", "solder", "merger"],
+  "target": { "item": "solder(copper_coil|silicon_die)", "amount": 10 },
+  "stars": { "time2": 300, "machines3": 20 },
+  "hint": "Cut ingots to dies, press wires to coils, then solder them. A merger can join two lines into one.",
+  "learn": "two lines into one product"
+}

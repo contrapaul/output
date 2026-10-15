@@ -1,0 +1,16 @@
+{
+  "id": "u5",
+  "tier": "journeyman",
+  "name": "Feed two stations",
+  "zone": { "w": 18, "h": 12 },
+  "fixed": [
+    { "t": "hopper_ingot", "x": 1, "y": 2, "r": 0 },
+    { "t": "hopper_wire", "x": 1, "y": 9, "r": 0 },
+    { "t": "dock", "x": 16, "y": 5, "r": 0, "target": "solder(copper_coil|silicon_die)", "amount": 8 }
+  ],
+  "unlocked": ["belt", "saw", "press", "solder", "splitter"],
+  "target": { "item": "solder(copper_coil|silicon_die)", "amount": 8 },
+  "stars": { "time2": 600, "machines3": 28 },
+  "hint": "The splitter copies each part and sends the copies to two directions. One coil line can feed two solder stations.",
+  "learn": "branching one source to two stations"
+}
