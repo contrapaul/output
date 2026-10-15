@@ -1,0 +1,12 @@
+# Dependencies (Cloudflare runs a fresh `npm install`; never commit these)
+node_modules/
+game/node_modules/
+
+# Build output
+dist/
+game/dist/
+
+# Local logs & OS cruft
+*.log
+.DS_Store
+Thumbs.db
