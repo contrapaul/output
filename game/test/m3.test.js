@@ -139,7 +139,7 @@ test("u4: full chain to a finished device", () => {
   assert.equal(g.dock.complete, true);
 });
 
-test("splitter: one coil line feeds two solder stations", () => {
+test("splitter: one coil line feeds two solder stations (alternating exits)", () => {
   const g = new GameRoot({
     id: "u5", zone: { w: 14, h: 8 },
     fixed: [
@@ -150,11 +150,11 @@ test("splitter: one coil line feeds two solder stations", () => {
     ],
     target: { item: BOARD, amount: 2 },
   });
-  // coil line: press -> splitter -> two directions
+  // coil line: press -> splitter -> alternating exits (5,2) and (4,3)
   g.placeMachine("belt", 1, 2, 0);
   g.placeMachine("press", 2, 2, 0);
   g.placeMachine("belt", 3, 2, 0);
-  g.placeMachine("splitter", 4, 2, 0); // copy 1 -> (5,2), copy 2 -> (4,3)
+  g.placeMachine("splitter", 4, 2, 0); // exit 1 -> (5,2), exit 2 -> (4,3)
   g.placeMachine("belt", 5, 2, 0);
   g.placeMachine("belt", 6, 2, 0);
   g.placeMachine("solder", 7, 2, 0);

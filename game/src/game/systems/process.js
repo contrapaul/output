@@ -28,7 +28,7 @@
 //   mounter   board + cell -> module
 //   encap     module + housing -> device
 //   merger    any -> any (pass-through)
-//   splitter  any -> 2 copies, sent to two different output directions
+//   splitter  any -> same part, routed to one of two exits (alternating)
 //   bin       any -> stored (FIFO, capacity 10, upgrade bin20 -> 20)
 //   recycler  any -> nothing (sink: the clean way to remove a part)
 
@@ -126,13 +126,13 @@ export const HANDLERS = {
   splitter: {
     needs: 1,
     inText: "any part",
-    outText: "two copies, sent to two directions",
+    outText: "the same part, to one of two exits",
     canTake: () => true,
     chargeTime: 0.2,
-    outDirs: [0, 1], // copy 1 to r, copy 2 to r+1
+    outDirs: [0, 1], // exits at r and r+1; parts alternate when both have room
     process: (inputs) => {
       if (inputs.length !== 1) return null;
-      return { outputs: [inputs[0], inputs[0]], left: [] };
+      return { outputs: [inputs[0]], left: [] };
     },
   },
   bin: {
@@ -147,6 +147,7 @@ export const HANDLERS = {
   },
   recycler: {
     needs: 1,
+    sink: true, // consumes items; GameRoot counts them in this.recycled
     inText: "any part or assembly",
     outText: "nothing (it removes the part)",
     canTake: () => true,
@@ -189,6 +190,7 @@ export class MachineInstance {
     this.buffer = [];      // FIFO storage (bin)
     this.outputs = [];     // item ids ready to eject
     this.charge = 0;       // accumulated charge time
+    this.outCursor = 0;    // next preferred outDirs slot (splitter alternation)
     this.upgrades = [];    // machine-level upgrade ids (unused in v1)
   }
 
@@ -222,5 +224,6 @@ export class MachineInstance {
     this.buffer = [];
     this.outputs = [];
     this.charge = 0;
+    this.outCursor = 0;
   }
 }

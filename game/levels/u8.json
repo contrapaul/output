@@ -11,6 +11,6 @@
   "unlocked": ["belt", "saw", "press", "solder", "merger", "splitter", "bin"],
   "target": { "item": "solder(copper_coil|silicon_die)", "amount": 24 },
   "stars": { "time2": 900, "machines3": 32 },
-  "hint": "A big order. Split one source to feed two solder stations, and use bins to store parts while the other line catches up.",
+  "hint": "A big order. Use the splitter to send coils to two solder stations, and use bins to store parts while the other line catches up.",
   "learn": "throughput with storage"
 }

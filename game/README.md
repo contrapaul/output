@@ -2,12 +2,9 @@
 
 Electronic-parts factory puzzle game for the edu/tools page.
 
-## Status: M2 complete (first playable gate)
+## Status
 
-- **M0** Scaffold: grid, camera, belt placement, line resolution ✅
-- **M1** Core loop: hopper → belt → saw → belt → dock, 25 tests ✅
-- **M2** Full recipe chain: all 7 machines, 7 levels, save system, 41 tests ✅
-- **M3** Full game: NEXT (units 5–8, upgrades, accessibility, polish)
+See `../STATUS.md` (phase status) and `../roadmap.md` (the plan).
 
 ## Quick start
 

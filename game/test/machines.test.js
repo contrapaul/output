@@ -60,9 +60,10 @@ test("merger: passes through any item", () => {
   }
 });
 
-test("splitter: duplicates one item into two copies", () => {
-  assert.deepEqual(HANDLERS.splitter.process(["copper_coil"]), { outputs: ["copper_coil", "copper_coil"], left: [] });
-  assert.deepEqual(HANDLERS.splitter.process([BOARD]), { outputs: [BOARD, BOARD], left: [] });
+test("splitter: one part in, one part out, two exits", () => {
+  // Phase 0: the splitter no longer duplicates parts (it routes them)
+  assert.deepEqual(HANDLERS.splitter.process(["copper_coil"]), { outputs: ["copper_coil"], left: [] });
+  assert.deepEqual(HANDLERS.splitter.process([BOARD]), { outputs: [BOARD], left: [] });
   assert.deepEqual(HANDLERS.splitter.outDirs, [0, 1]);
 });
 

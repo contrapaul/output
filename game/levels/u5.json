@@ -11,6 +11,6 @@
   "unlocked": ["belt", "saw", "press", "solder", "splitter"],
   "target": { "item": "solder(copper_coil|silicon_die)", "amount": 8 },
   "stars": { "time2": 600, "machines3": 28 },
-  "hint": "The splitter copies each part and sends the copies to two directions. One coil line can feed two solder stations.",
+  "hint": "The splitter sends each part to one of two exits, alternating. One coil line can feed two solder stations.",
   "learn": "branching one source to two stations"
 }

@@ -10,7 +10,8 @@
 //   - items only leave a line/machine when the acceptor can take THAT item
 //     (canTake + dock target + bin capacity) - no silent item loss
 //   - bins buffer (FIFO) up to their capacity (upgrade bin20 -> 20)
-//   - splitter outputs two copies to two directions (handler.outDirs)
+//   - splitter routes a part to one of two exits (handler.outDirs),
+//     alternating when both have room (MachineInstance.outCursor)
 //   - recycler consumes items (sink); counted in this.recycled
 //   - upgrades (profile level, never required):
 //       motor2x     machine charge rate x2
@@ -60,7 +61,11 @@ export class GameRoot {
 
     // per-level state
     this.placedCount = 0;
-    this.recycled = 0;
+    // conservation ledger: itemCount() === emitted - delivered - recycled - partsRemoved
+    this.emitted = 0; // parts released into the world by hoppers
+    this.delivered = 0; // parts accepted by the dock
+    this.recycled = 0; // parts consumed by recyclers
+    this.partsRemoved = 0; // parts lost when their belt tile was deleted
     this.coinsEarnedHere = 0;
     this.dock = null;
     this.dockPos = null;
@@ -88,7 +93,7 @@ export class GameRoot {
       }
     }
 
-    this._rebuildFlowLines();
+    this._initFlowLines();
   }
 
   _hopperItem(typeId) {
@@ -101,10 +106,69 @@ export class GameRoot {
     return map[typeId] || "silicon_ingot";
   }
 
-  _rebuildFlowLines() {
+  _initFlowLines() {
     this.flowLines.clear();
     for (const line of this.world.lines.allLines()) {
       this.flowLines.set(line.id, new FlowLine(line, this.world));
+    }
+  }
+
+  /**
+   * Snapshot each item's tile BEFORE a world mutation, so the edit can be
+   * applied without dropping in-transit parts (Phase 0: no item wipe).
+   */
+  _snapshotItemTiles() {
+    const snap = new Map();
+    for (const [id, fl] of this.flowLines) {
+      const tiles = fl.line.tiles;
+      const entries = [];
+      for (const it of fl.items) {
+        const i = Math.min(Math.floor(it.d), tiles.length - 1);
+        const t = tiles[i];
+        if (t) entries.push({ tileKey: t.key, x: t.x, y: t.y, frac: it.d - i, item: it.item });
+      }
+      snap.set(id, entries);
+    }
+    return snap;
+  }
+
+  /**
+   * Re-home every item after a belt edit (place/remove/split/splice).
+   * An item keeps the tile it sat on; its new distance is that tile's index
+   * in the line that now owns it. Items whose tile was deleted are removed
+   * (counted in partsRemoved, "partRemoved" signal for the puff) - there is
+   * no player stock system yet, so removal is the documented choice.
+   */
+  _resyncFlowLines(snapshot) {
+    const next = new Map();
+    for (const line of this.world.lines.allLines()) {
+      next.set(line.id, new FlowLine(line, this.world));
+    }
+    const removed = [];
+    for (const [id, entries] of snapshot) {
+      for (const e of entries) {
+        const cur = this.world.lines.tileToLine.get(e.tileKey);
+        if (cur) {
+          const idx = cur.index(e.tileKey);
+          if (idx !== null) {
+            const target = next.get(cur.id);
+            if (target) {
+              target.items.push({
+                d: Math.min(idx + e.frac, cur.length - 1),
+                item: e.item,
+              });
+            }
+            continue;
+          }
+        }
+        removed.push({ item: e.item, x: e.x, y: e.y });
+      }
+    }
+    for (const fl of next.values()) fl.items.sort((a, b) => a.d - b.d);
+    this.flowLines = next;
+    if (removed.length) {
+      this.partsRemoved += removed.length;
+      for (const r of removed) this.signals.emit("partRemoved", { item: r.item, x: r.x, y: r.y });
     }
   }
 
@@ -113,9 +177,10 @@ export class GameRoot {
   placeMachine(type, x, y, r, z) {
     if (z === undefined) z = type === "belt_high" ? 1 : 0;
     if (type === "belt" || type === "belt_high") {
+      const snapshot = this._snapshotItemTiles();
       const ok = this.world.place(type, x, y, r, z);
       if (ok) {
-        this._rebuildFlowLines();
+        this._resyncFlowLines(snapshot);
         this.placedCount++;
         this.stats.machinesBuilt++;
       }
@@ -137,9 +202,11 @@ export class GameRoot {
     const key = tileKey(x, y, z);
     const m = this.world.machineAt(x, y, z);
     if (!m) return null;
+    const isBelt = m.t === "belt" || m.t === "belt_high";
+    const snapshot = isBelt ? this._snapshotItemTiles() : null;
     this.world.remove(x, y, z);
     this.machines.delete(key);
-    this._rebuildFlowLines();
+    if (isBelt) this._resyncFlowLines(snapshot);
     this.jam = null;
     return m;
   }
@@ -202,7 +269,7 @@ export class GameRoot {
         target: this.dock.target,
         stars,
         coins: this.coins,
-        earned: this.coinsEarnHere,
+        earned: this.coinsEarnedHere,
         time: this.time,
       });
     }
@@ -226,6 +293,7 @@ export class GameRoot {
       const idx = line.index(tileKey(front.x, front.y, front.z));
       if (idx === null) continue;
       if (flowLine.accept(h.item, idx)) {
+        this.emitted++;
         h.cooldown = 1 / h.rate;
       }
     }
@@ -285,14 +353,20 @@ export class GameRoot {
     }
     if (a.kind === "dock") {
       if (this.dock && !this.dock.complete && this.dock.tryAccept(item)) {
-        const gain = this.creditPerItem();
-        this.coins += gain;
-        this.coinsEarnHere += gain;
-        this.signals.emit("itemAccepted", { item, accepted: this.dock.accepted, gain });
+        this._creditDock(item);
         return true;
       }
     }
     return false;
+  }
+
+  /** Dock accepted an item: credits + ledger (single source of truth). */
+  _creditDock(item) {
+    const gain = this.creditPerItem();
+    this.coins += gain;
+    this.coinsEarnedHere += gain;
+    this.delivered++;
+    this.signals.emit("itemAccepted", { item, accepted: this.dock.accepted, gain });
   }
 
   _tickLines(dt) {
@@ -335,6 +409,7 @@ export class GameRoot {
           if (res) {
             const outputs = Array.isArray(res) ? res : res.outputs;
             const left = Array.isArray(res) ? [] : res.left || [];
+            if (h.sink) this.recycled += m.inputs.length - left.length;
             m.outputs = outputs;
             m.inputs = left;
             m.charge = 0;
@@ -345,58 +420,63 @@ export class GameRoot {
   }
 
   /**
-   * Eject machine outputs one by one. Output i goes to direction
-   * r + (handler.outDirs ? handler.outDirs[min(i, len-1)] : 0).
+   * Eject machine outputs one by one. Machines with handler.outDirs
+   * (splitter) try their exits starting at m.outCursor and alternate the
+   * cursor after each successful eject, so two open exits share the load.
    */
   _ejectMachineOutput(m) {
     const h = m.handler;
     const outDirs = h && h.outDirs ? h.outDirs : [0];
     while (m.outputs.length > 0) {
-      const i = outDirs.length - m.outputs.length; // index of first output
-      const outDir = (m.r + outDirs[Math.min(Math.max(i, 0), outDirs.length - 1)]) % 4;
-      const ox = m.x + DIRS[outDir].dx;
-      const oy = m.y + DIRS[outDir].dy;
-      const target = this.world.machineAt(ox, oy, 0) || this.world.machineAt(ox, oy, 1);
       const item = m.outputs[0];
-      let ejected = false;
-      if (target) {
-        if (target.t === "belt" || target.t === "belt_high") {
-          const line = this.world.lines.lineForTile(ox, oy, target.z);
-          const flowLine = line && this.flowLines.get(line.id);
-          if (flowLine) {
-            const idx = line.index(tileKey(ox, oy, target.z));
-            if (idx !== null && flowLine.accept(item, idx)) ejected = true;
-          }
-        } else if (target.t === "dock") {
-          if (this.dock && this.dock.tryAccept(item)) {
-            ejected = true;
-            const gain = this.creditPerItem();
-            this.coins += gain;
-            this.coinsEarnHere += gain;
-            this.signals.emit("itemAccepted", { item, accepted: this.dock.accepted, gain });
-          }
-        } else if (target.t in HANDLERS) {
-          const tm = this.machines.get(tileKey(ox, oy, 0));
-          if (tm) {
-            const th = tm.handler;
-            if (th) {
-              const full = th.buffer
-                ? tm.buffer.length >= this.binCapacity()
-                : tm.outputs.length > 0 || tm.inputs.length >= (th.needs || 1);
-              const dupPair = !th.buffer && th.needs === 2 && tm.inputs.includes(item);
-              if (!full && !dupPair && th.canTake(item)) {
-                if (th.buffer) tm.buffer.push(item);
-                else tm.inputs.push(item);
-                ejected = true;
-              }
-            }
-          }
-        }
+      let used = -1;
+      for (let k = 0; k < outDirs.length; k++) {
+        const di = (m.outCursor + k) % outDirs.length;
+        if (this._ejectToDir(m, outDirs[di], item)) { used = di; break; }
       }
-      if (ejected) m.outputs.shift();
-      else break;
+      if (used < 0) break;
+      m.outputs.shift();
+      m.outCursor = (used + 1) % outDirs.length;
     }
     return m.outputs.length === 0;
+  }
+
+  /** Try to deliver one item through exit `dirOffset` (0-based, + r). */
+  _ejectToDir(m, dirOffset, item) {
+    const outDir = (m.r + dirOffset) % 4;
+    const ox = m.x + DIRS[outDir].dx;
+    const oy = m.y + DIRS[outDir].dy;
+    const target = this.world.machineAt(ox, oy, 0) || this.world.machineAt(ox, oy, 1);
+    if (!target) return false;
+    if (target.t === "belt" || target.t === "belt_high") {
+      const line = this.world.lines.lineForTile(ox, oy, target.z);
+      const flowLine = line && this.flowLines.get(line.id);
+      if (!flowLine) return false;
+      const idx = line.index(tileKey(ox, oy, target.z));
+      return idx !== null && flowLine.accept(item, idx);
+    }
+    if (target.t === "dock") {
+      if (this.dock && !this.dock.complete && this.dock.tryAccept(item)) {
+        this._creditDock(item);
+        return true;
+      }
+      return false;
+    }
+    if (target.t in HANDLERS) {
+      const tm = this.machines.get(tileKey(ox, oy, 0));
+      if (!tm) return false;
+      const th = tm.handler;
+      if (!th) return false;
+      const full = th.buffer
+        ? tm.buffer.length >= this.binCapacity()
+        : tm.outputs.length > 0 || tm.inputs.length >= (th.needs || 1);
+      const dupPair = !th.buffer && th.needs === 2 && tm.inputs.includes(item);
+      if (full || dupPair || !th.canTake(item)) return false;
+      if (th.buffer) tm.buffer.push(item);
+      else tm.inputs.push(item);
+      return true;
+    }
+    return false;
   }
 
   // ---- jam detection (H key) -------------------------------------------
@@ -480,8 +560,11 @@ export class GameRoot {
     for (const h of this.hoppers) h.cooldown = 0;
     this.tickCount = 0;
     this.time = 0;
+    this.emitted = 0;
+    this.delivered = 0;
     this.recycled = 0;
-    this.coinsEarnHere = 0;
+    this.partsRemoved = 0;
+    this.coinsEarnedHere = 0;
     this._completed = false;
     this.jam = null;
   }
