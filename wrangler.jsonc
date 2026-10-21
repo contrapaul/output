@@ -1,12 +1,9 @@
 {
-  // Static-assets Worker: no server code. Cloudflare Workers Builds runs
-  // `npx wrangler deploy` from the repo root; the build step below compiles
-  // the Vite game into game/dist first, then that folder is uploaded as-is.
+  // Static-assets Worker: no server code. Workers Builds uses root directory
+  // `game`, runs `npm run build` there, then `npx wrangler deploy`, which finds
+  // this file one level up. Asset paths resolve relative to this file.
   "name": "output",
   "compatibility_date": "2026-09-01",
-  "build": {
-    "command": "cd game && npm ci && npm run build"
-  },
   "assets": {
     "directory": "./game/dist",
     "not_found_handling": "single-page-application"
