@@ -1,0 +1,8 @@
+{
+  "_about": "Power (Phase 3). Machines use power while placed. Belts, mergers, splitters, hoppers and small and medium depots use none. Operation machines take their power from operations.json. Generators cost credits to place (refunded when removed). spacing: tiles around a wind turbine that must stay free of machines.",
+  "use": { "recycler": 1, "depot_l": 1 },
+  "generators": {
+    "solar": { "name": "Solar panel", "output": 2, "price": 25 },
+    "wind": { "name": "Wind turbine", "output": 6, "price": 80, "spacing": 1 }
+  }
+}

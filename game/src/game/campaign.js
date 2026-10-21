@@ -14,9 +14,18 @@
 //   contractComplete { contract, next, unlocked: [ids] }
 //   expanded         { stage, zone, hoppers }
 //   allContractsDone {}
+//   cityCapped       { cityPower }       the city stops covering all power
+//   perkOffer        { offers }          a milestone: pick 1 of 3
+//   perkChosen       { card }
+//
+// Phase 3: a contract may set `cityPower` (the city's power cap from then
+// on), `gift` (free builds, for example { "solar": 2 }) and `perks` (fixed
+// perk ids for its level-up card). Every milestone offers a perk choice.
 
-import { GameRoot } from "./root.js";
+import { GameRoot, GENERATORS } from "./root.js";
 import { contracts as contractData, plot } from "../data/index.js";
+import { makeOffer, applyPerk, applyLasting, ONE_TIME } from "./perks.js";
+import { MACHINE_NAMES } from "./systems/process.js";
 
 export const CONTRACTS = contractData.list;
 export const STAGES = plot.stages;
@@ -25,6 +34,7 @@ export const STAGES = plot.stages;
 export const ALL_TOOLS = [
   "belt", "belt_high", "cutter", "press", "combiner", "encaser",
   "merger", "splitter", "depot_s", "depot_m", "depot_l", "recycler",
+  ...Object.keys(GENERATORS),
 ];
 
 export class Campaign {
@@ -44,6 +54,12 @@ export class Campaign {
       },
       profile
     );
+    this.perks = state.perks || []; // chosen perk cards
+    this.pendingOffer = state.pendingOffer || null;
+    const g = this.game;
+    g.cityPower = state.cityPower ?? null;
+    g.freeBuilds = { ...(state.freeBuilds || {}) };
+    for (const card of this.perks) if (!ONE_TIME.has(card.id)) applyLasting(g, card);
     // parts from earlier contracts are taken for free (no stuck changeovers)
     for (const c of CONTRACTS.slice(0, this.index)) this.game.dock.leftovers.add(c.item);
     this._setOrder(state.mainAccepted || 0);
@@ -88,10 +104,31 @@ export class Campaign {
     }
     this.index++;
     this.game.dock.leftovers.add(c.item);
+    for (const [tool, n] of Object.entries(c.gift || {})) this.game.freeBuilds[tool] = (this.game.freeBuilds[tool] || 0) + n;
     if (c.milestone) this.expand();
     this._setOrder(0);
     this.game.signals.emit("contractComplete", { contract: c, next: this.current, unlocked });
+    if (typeof c.cityPower === "number") {
+      this.game.cityPower = c.cityPower;
+      this.game.signals.emit("cityCapped", { cityPower: c.cityPower });
+    }
+    if (c.milestone) {
+      this.pendingOffer = makeOffer(this, MACHINE_NAMES, c.perks);
+      if (this.pendingOffer.length) this.game.signals.emit("perkOffer", { offers: this.pendingOffer });
+      else this.pendingOffer = null;
+    }
     if (this.done) this.game.signals.emit("allContractsDone", {});
+  }
+
+  /** The player picked card `i` of the pending offer. */
+  choosePerk(i) {
+    const card = this.pendingOffer?.[i];
+    if (!card) return null;
+    applyPerk(this, card);
+    this.perks.push(card);
+    this.pendingOffer = null;
+    this.game.signals.emit("perkChosen", { card });
+    return card;
   }
 
   /** Move to the next plot stage: bigger zone, new hoppers. */
@@ -112,6 +149,10 @@ export class Campaign {
       stage: this.stage,
       unlocked: [...this.unlocked],
       mainAccepted: this.game.dock.main ? this.game.dock.main.accepted : 0,
+      cityPower: this.game.cityPower,
+      freeBuilds: { ...this.game.freeBuilds },
+      perks: this.perks,
+      pendingOffer: this.pendingOffer,
     };
   }
 }

@@ -42,6 +42,7 @@ export class SaveSystem {
     for (const m of game.world.machinesList()) {
       if (m.fixed) continue;
       const p = { t: m.t, x: m.x, y: m.y, r: m.r, z: m.z || 0 };
+      if (m.paid) p.paid = m.paid;
       const inst = game.machines.get(tileKey(m.x, m.y, 0));
       if (inst && (m.z || 0) === 0) {
         if (inst.inputs.length) { p.in = [...inst.inputs]; p.is = [...inst.inputSides]; }
@@ -85,7 +86,8 @@ export class SaveSystem {
     });
     const game = campaign.game;
     for (const p of data.pieces || []) {
-      if (!game.placeMachine(p.t, p.x, p.y, p.r, p.z || 0)) continue;
+      // force: a saved factory may already be over the power cap
+      if (!game.placeMachine(p.t, p.x, p.y, p.r, p.z || 0, { force: true, paid: p.paid || 0 })) continue;
       const inst = game.machines.get(tileKey(p.x, p.y, 0));
       if (inst && (p.z || 0) === 0) {
         inst.inputs = p.in || [];

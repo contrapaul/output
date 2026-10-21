@@ -42,7 +42,7 @@ pressing is its last step. A combiner takes one part from each side.
 
 | Input | Action |
 |---|---|
-| 1 to 9, 0, - | pick a tool from the toolbar |
+| 1 to 9, 0, -, =, [, ] | pick a tool from the toolbar |
 | left-drag with a tool | draw a path, release to build (belts follow the path and turn corners; machines repeat) |
 | drop a machine on a belt | inserts the machine into the line |
 | F or R (Shift to reverse) | rotate the ghost, or the selected piece in place |

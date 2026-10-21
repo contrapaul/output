@@ -110,6 +110,7 @@ export class Renderer {
     this._drawLand(ctx, colors, tile);
     this._drawBelts(ctx, colors, tile, 0);
     this._drawMachines(ctx, tile);
+    this._drawGenerators(ctx, tile);
     this._drawHoppers(ctx, tile);
     this._drawDock(ctx, tile);
     this._drawItems(ctx, tile, 0);
@@ -342,8 +343,70 @@ export class Renderer {
     ctx.restore();
   }
 
+  _drawGenerators(ctx, tile) {
+    for (const m of this.world.machines.values()) {
+      if ((m.t !== "solar" && m.t !== "wind") || !this._visible(m.x, m.y)) continue;
+      const px = m.x * tile;
+      const py = m.y * tile;
+      if (m.t === "solar") {
+        ctx.fillStyle = "#2f4a78";
+        ctx.fillRect(px + tile * 0.08, py + tile * 0.08, tile * 0.84, tile * 0.84);
+        if (this.far) continue;
+        ctx.strokeStyle = "rgba(200,220,255,0.6)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const k of [0.36, 0.64]) {
+          ctx.moveTo(px + tile * k, py + tile * 0.08);
+          ctx.lineTo(px + tile * k, py + tile * 0.92);
+          ctx.moveTo(px + tile * 0.08, py + tile * k);
+          ctx.lineTo(px + tile * 0.92, py + tile * k);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,0.4)";
+        ctx.strokeRect(px + tile * 0.08, py + tile * 0.08, tile * 0.84, tile * 0.84);
+        continue;
+      }
+      // wind turbine: base, mast and turning blades
+      const cx = px + tile / 2;
+      const cy = py + tile * 0.42;
+      ctx.fillStyle = "#cfd6dd";
+      if (this.far) {
+        ctx.fillRect(px + 4, py + 4, tile - 8, tile - 8);
+        continue;
+      }
+      ctx.beginPath();
+      ctx.arc(cx, py + tile * 0.85, tile * 0.14, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = "#9aa4ad";
+      ctx.lineWidth = tile * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(cx, py + tile * 0.85);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      const spin = this.settings.motion ? this._t * 0.08 : 0;
+      ctx.fillStyle = "#eef2f5";
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 1;
+      for (let k = 0; k < 3; k++) {
+        const a = spin + (k * Math.PI * 2) / 3;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.ellipse(0, -tile * 0.18, tile * 0.05, tile * 0.18, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.fillStyle = "#7d8790";
+      ctx.beginPath();
+      ctx.arc(cx, cy, tile * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   _drawDepot(ctx, m, px, py, tile) {
-    const cap = m.handler.capacity;
+    const cap = this.game.capacityOf(m);
     const n = m.buffer.length + m.outputs.length;
     const frac = Math.min(n / cap, 1);
     const inset = { depot_s: 0.22, depot_m: 0.16, depot_l: 0.12 }[m.type];

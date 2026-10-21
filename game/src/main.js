@@ -12,6 +12,7 @@
 import { GameLoop } from "./core/loop.js";
 import { CONFIG } from "./core/config.js";
 import { Campaign, sandboxGame, ALL_TOOLS } from "./game/campaign.js";
+import { GENERATORS } from "./game/root.js";
 import { Camera } from "./game/camera.js";
 import { Renderer } from "./game/renderer.js";
 import { Input } from "./game/input.js";
@@ -57,6 +58,12 @@ function startCampaign(c) {
   sig.on("contractComplete", onContractComplete);
   sig.on("expanded", onExpanded);
   sig.on("allContractsDone", () => toast("Every contract is done!", "Great work. Your factory keeps running. More contracts are coming."));
+  sig.on("cityCapped", ({ cityPower }) => {
+    toast("The city is out of power", `We have used all the power the city can give us (${cityPower}). From now on, build solar panels and wind turbines to power new machines. Here are 2 free solar panels to start.`, 12000);
+    refreshTopbar();
+  });
+  sig.on("perkOffer", showPerkCard);
+  if (c.pendingOffer) showPerkCard({ offers: c.pendingOffer });
   autosave = setInterval(persist, 10000);
   refreshOrder();
   if (!c.current) status("Your factory keeps running.");
@@ -89,7 +96,7 @@ function attach(g, tools) {
     onStatus: status,
     onSelect: (sel) => (sel ? showCard(sel) : hideCard()),
     onHover: showTooltip,
-    onChange: () => { game.jam = null; persist(); },
+    onChange: () => { game.jam = null; persist(); refreshTopbar(); },
     canUseTool: (t) => (campaign ? campaign.unlocked.has(t) : true),
   });
   input.attach();
@@ -107,9 +114,12 @@ function attach(g, tools) {
   buildHud();
 }
 
+// short toolbar labels; the hover card and messages use the full names
+const SHORT = { belt_high: "Overhead", depot_s: "Depot S", depot_m: "Depot M", depot_l: "Depot L", solar: "Solar", wind: "Wind", belt: "Belt" };
+
 function buildToolbar(tools) {
   if (toolbar) toolbar.detach();
-  toolbar = new Toolbar(toolbarEl, tools.map((id) => ({ id, name: MACHINE_NAMES[id] || id })), {
+  toolbar = new Toolbar(toolbarEl, tools.map((id) => ({ id, name: SHORT[id] || MACHINE_NAMES[id] || id, title: MACHINE_NAMES[id] || id })), {
     onToolChange: (id) => input?.setTool(id),
   });
 }
@@ -162,6 +172,7 @@ function buildHud() {
   bar.className = "hud";
   bar.innerHTML = `
     <span id="tb-coins" style="font-weight:600;"></span>
+    <span id="tb-power" title="Power used / power you have"></span>
     <button class="btn sm" id="tb-pause">pause</button>
     <button class="btn sm" id="tb-speed">1x</button>
     <button class="btn sm" id="tb-hint">hint (H)</button>
@@ -178,7 +189,18 @@ function buildHud() {
 function refreshTopbar() {
   const bar = document.getElementById("topbar");
   if (!bar || !game) return;
-  bar.querySelector("#tb-coins").textContent = mode === "sandbox" ? "Sandbox" : `${game.coins} credits`;
+  bar.querySelector("#tb-coins").textContent = mode === "sandbox" ? "Sandbox" : `${Math.floor(game.coins)} credits`;
+  const used = game.powerUsed();
+  const supply = game.powerSupply();
+  const pw = bar.querySelector("#tb-power");
+  pw.textContent = supply === Infinity ? `Power ${used} (city)` : `Power ${used} / ${supply}`;
+  pw.classList.toggle("high", supply !== Infinity && used >= 0.9 * supply);
+  if (toolbar) {
+    for (const id of Object.keys(GENERATORS)) {
+      const free = game.freeBuilds[id] || 0;
+      toolbar.setNote(id, free ? `${free} free` : `${game.priceOf(id)} credits`);
+    }
+  }
   bar.querySelector("#tb-pause").textContent = game.paused ? "resume" : "pause";
   bar.querySelector("#tb-speed").textContent = `${loop?.speed || 1}x`;
 }
@@ -223,6 +245,32 @@ function refreshOrder() {
   }
   el.querySelector(".bar > div").style.width = `${Math.min(100, (main.accepted / main.amount) * 100)}%`;
   el.querySelector(".count").textContent = `${main.accepted} of ${main.amount}`;
+}
+
+/** Level-up: pick 1 of 3 perks. The game keeps running behind the card. */
+function showPerkCard({ offers }) {
+  document.getElementById("perk-card")?.remove();
+  const el = document.createElement("div");
+  el.id = "perk-card";
+  el.className = "hud";
+  el.innerHTML = `<h3>Level up! Choose one</h3>
+    <div style="color:var(--muted);font-size:0.85rem;">Your factory keeps running while you choose.</div>
+    <div class="perks">${offers.map((o, i) => `
+      <button class="btn" data-i="${i}">
+        <div class="cat">${o.category}</div>
+        <div class="pname">${o.name}</div>
+        <div class="ptext">${o.text}</div>
+      </button>`).join("")}</div>`;
+  document.getElementById("app").appendChild(el);
+  el.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => {
+    const card = campaign.choosePerk(Number(b.dataset.i));
+    el.remove();
+    if (card) {
+      toast(`Perk: ${card.name}`, card.text);
+      if (card.id === "free_depot") buildToolbar(campaign.tools());
+    }
+    persist();
+  }));
 }
 
 function toast(title, body, ms = 6000) {
@@ -353,6 +401,10 @@ function hoverLines(x, y) {
     } else if (w.t === "hopper") {
       const h = game.hoppers.find((hp) => hp.x === x && hp.y === y);
       lines.push(`<strong>Hopper</strong>`, `Gives ${itemName(h.item)} every ${Math.round(1 / h.rate)} seconds. It never runs out.`);
+    } else if (GENERATORS[w.t]) {
+      const g = GENERATORS[w.t];
+      lines.push(`<strong>${g.name}</strong>`, `Makes ${g.output} power.`, w.paid ? `You get ${w.paid} credits back if you remove it.` : "It was free.");
+      if (w.t === "wind" && !game.mods.calmWinds) lines.push("Needs empty space around it. Belts are fine.");
     } else if (w.t === "dock") {
       const m = game.dock?.main;
       lines.push(`<strong>${MACHINE_NAMES.dock}</strong>`, m ? `Needs ${itemName(m.item)}: ${m.accepted} of ${m.amount}. Parts from earlier orders are taken for free.` : "No order right now.");
@@ -361,6 +413,8 @@ function hoverLines(x, y) {
       const h = m?.handler;
       if (!h) continue;
       lines.push(`<strong>${MACHINE_NAMES[w.t] || w.t}</strong>`, `Takes ${h.inText}.`, `Makes ${h.outText}.`);
+      const pw = game.powerOf(w.t);
+      if (pw) lines.push(`Uses ${pw} power.`);
       if (h.buffer) lines.push(m.stored ? `Holds ${m.buffer.length + m.outputs.length} ${itemName(m.stored)}.` : "Empty.");
       else if (m.inputs.length) lines.push(`Has ${m.inputs.map(itemName).join(", ")}.`);
       lines.push(`Now: ${STATE_TEXT[game.machineState(m)]}.`);
@@ -492,5 +546,5 @@ if (params.has("art")) {
 
 window.__output = {
   get game() { return game; }, get camera() { return camera; }, get input() { return input; },
-  get campaign() { return campaign; }, saveSys, startSandbox, showMenu, status,
+  get campaign() { return campaign; }, saveSys, startSandbox, startCampaign, Campaign, showMenu, status,
 };

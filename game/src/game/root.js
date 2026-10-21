@@ -33,9 +33,12 @@ import { MachineInstance, HANDLERS, MACHINE_NAMES, acceptsFrom, localSide } from
 import { OrderDock } from "./systems/dock.js";
 import { Signals } from "../core/signals.js";
 import { DIRS, tileKey } from "../core/grid.js";
-import { itemName } from "./items.js";
+import { itemName, material } from "./items.js";
+import { power as powerData } from "../data/index.js";
 
 const HOPPER_RATE = 0.5; // parts per second
+export const GENERATORS = powerData.generators;
+const BELTS = new Set(["belt", "belt_high"]);
 
 export class GameRoot {
   /**
@@ -59,6 +62,21 @@ export class GameRoot {
     );
     this.stats = Object.assign({ timePlayedSec: 0, machinesBuilt: 0 }, profile.stats || {});
     this.speedMult = 1; // machine speed (upgrades, Phase 4)
+    this.cityPower = null; // null: the city covers all demand
+    this.freeBuilds = {}; // tool id -> free placements left (perks)
+    this.mods = {
+      powerDelta: {}, // type -> change in power use
+      freePower: new Set(), // types that use no power
+      typeSpeed: {}, // type -> speed multiplier
+      beltMult: 1,
+      hopperMult: {}, // material -> rate multiplier
+      depotMult: 1,
+      bonusCutEvery: 0, // every Nth cut makes one extra half (0 = off)
+      creditMult: 1,
+      priceMult: 1,
+      calmWinds: false,
+    };
+    this.cutJobs = 0;
 
     // ledger
     this.emitted = 0;
@@ -170,9 +188,14 @@ export class GameRoot {
 
   // ---- placement ----------------------------------------------------------
 
-  placeMachine(type, x, y, r, z) {
+  /**
+   * Place a piece. Returns the world entry or null. Machines and generators
+   * also need power and credits (budgetError). `opts.force` skips the budget
+   * (restoring a save, where the factory may already be over the cap).
+   */
+  placeMachine(type, x, y, r, z, opts = {}) {
     if (z === undefined) z = type === "belt_high" ? 1 : 0;
-    if (type === "belt" || type === "belt_high") {
+    if (BELTS.has(type)) {
       const snapshot = this._snapshotItemTiles();
       const ok = this.world.place(type, x, y, r, z);
       if (ok) {
@@ -182,16 +205,99 @@ export class GameRoot {
       }
       return ok;
     }
-    if (type in HANDLERS) {
-      const ok = this.world.place(type, x, y, r, 0);
-      if (ok) {
-        this.machines.set(tileKey(x, y, 0), new MachineInstance(type, x, y, r));
-        this.placedCount++;
-        this.stats.machinesBuilt++;
+    if (!(type in HANDLERS) && !GENERATORS[type]) return null;
+    if (!opts.force && this.budgetError(type, x, y) !== null) return null;
+    const ok = this.world.place(type, x, y, r, 0);
+    if (!ok) return null;
+    if (type in HANDLERS) this.machines.set(tileKey(x, y, 0), new MachineInstance(type, x, y, r));
+    if (opts.paid !== undefined) ok.paid = opts.paid;
+    else if (!opts.force) this._pay(ok);
+    this.placedCount++;
+    this.stats.machinesBuilt++;
+    return ok;
+  }
+
+  _pay(entry) {
+    const price = this.priceOf(entry.t);
+    if (!price) return;
+    if ((this.freeBuilds[entry.t] || 0) > 0) {
+      this.freeBuilds[entry.t]--;
+      entry.paid = 0;
+      return;
+    }
+    this.coins -= price;
+    entry.paid = price;
+  }
+
+  // ---- power and prices ----------------------------------------------------
+
+  /** Power one piece of `type` uses. */
+  powerOf(type) {
+    if (GENERATORS[type] || BELTS.has(type)) return 0;
+    if (this.mods.freePower.has(type)) return 0;
+    const base = HANDLERS[type]?.power ?? powerData.use[type] ?? 0;
+    return Math.max(0, base + (this.mods.powerDelta[type] || 0));
+  }
+
+  powerUsed() {
+    let n = 0;
+    for (const m of this.world.machines.values()) if (!m.fixed) n += this.powerOf(m.t);
+    return n;
+  }
+
+  generatorOutput() {
+    let n = 0;
+    for (const m of this.world.machines.values()) if (GENERATORS[m.t]) n += GENERATORS[m.t].output;
+    return n;
+  }
+
+  /** Total supply: Infinity while the city still covers everything. */
+  powerSupply() {
+    return this.cityPower === null ? Infinity : this.cityPower + this.generatorOutput();
+  }
+
+  priceOf(type) {
+    const g = GENERATORS[type];
+    return g ? Math.round(g.price * this.mods.priceMult) : 0;
+  }
+
+  /**
+   * Why the budget blocks placing `type` at (x, y), or null. `view` answers
+   * machineAt (the planning overlay for a drag); `extra` is what earlier
+   * tiles of the same drag already use { power, credits, free }.
+   */
+  budgetError(type, x, y, view = this.world, extra = { power: 0, credits: 0, free: 0 }) {
+    const cost = this.powerOf(type);
+    if (cost > 0 && this.powerUsed() + extra.power + cost > this.powerSupply()) {
+      return `needs ${cost} power. Build solar panels or wind turbines`;
+    }
+    const price = this.priceOf(type);
+    const freeLeft = (this.freeBuilds[type] || 0) - extra.free;
+    if (price > 0 && freeLeft <= 0 && this.coins - extra.credits < price) {
+      return `needs ${price} credits`;
+    }
+    return this.windError(type, x, y, view);
+  }
+
+  /** Wind turbines need clear space around them (both ways). */
+  windError(type, x, y, view = this.world) {
+    if (this.mods.calmWinds || BELTS.has(type)) return null;
+    const spacing = GENERATORS.wind?.spacing || 1;
+    for (let dy = -spacing; dy <= spacing; dy++) {
+      for (let dx = -spacing; dx <= spacing; dx++) {
+        if (!dx && !dy) continue;
+        const n = view.machineAt(x + dx, y + dy, 0);
+        if (!n || BELTS.has(n.t)) continue;
+        if (type === "wind") return "a wind turbine needs empty space around it (belts are fine)";
+        if (n.t === "wind") return "too close to a wind turbine";
       }
-      return ok;
     }
     return null;
+  }
+
+  /** Effective storage of a depot (perks can raise it). */
+  capacityOf(m) {
+    return Math.floor(m.handler.capacity * this.mods.depotMult);
   }
 
   /**
@@ -199,10 +305,10 @@ export class GameRoot {
    * as `injected` in the ledger.
    */
   placeFilledDepot(type, x, y, r, item, amount) {
-    const ok = this.placeMachine(type, x, y, r, 0);
+    const ok = this.placeMachine(type, x, y, r, 0, { force: true });
     if (!ok) return null;
     const m = this.machines.get(tileKey(x, y, 0));
-    const n = Math.min(amount, m.handler.capacity);
+    const n = Math.min(amount, this.capacityOf(m));
     for (let i = 0; i < n; i++) m.buffer.push(item);
     this.injected += n;
     return ok;
@@ -222,6 +328,7 @@ export class GameRoot {
     const inst = this.machines.get(key);
     this.world.remove(x, y, z);
     this.machines.delete(key);
+    if (m.paid) this.coins += m.paid; // generators give their credits back
     if (isBelt) this._resyncFlowLines(snapshot);
     if (inst) {
       const held = [...inst.inputs, ...inst.outputs, ...inst.buffer];
@@ -277,9 +384,13 @@ export class GameRoot {
       if (h.cooldown > 0) continue;
       if (this._ejectToDir({ x: h.x, y: h.y, r: h.dir }, 0, h.item)) {
         this.emitted++;
-        h.cooldown = 1 / h.rate;
+        h.cooldown = 1 / this.hopperRate(h);
       }
     }
+  }
+
+  hopperRate(h) {
+    return h.rate * (this.mods.hopperMult[material(h.item)] || 1);
   }
 
   /**
@@ -317,7 +428,7 @@ export class GameRoot {
     if (h.buffer) {
       const stored = m.stored;
       if (stored && stored !== item) return false; // one kind of part per depot
-      return m.buffer.length < h.capacity;
+      return m.buffer.length < this.capacityOf(m);
     }
     if (m.outputs.length > 0) return false;
     if (h.oneEachSide && m.inputSides.includes(localSide(m.r, fromDir))) return false;
@@ -361,7 +472,7 @@ export class GameRoot {
     if (!slot) return false;
     this.delivered++;
     if (slot.kind === "leftover") return true; // free: no credits, no progress
-    const gain = slot.creditEach || 0;
+    const gain = (slot.creditEach || 0) * this.mods.creditMult;
     this.coins += gain;
     this.signals.emit("itemAccepted", { item, slot, gain });
     if (slot.accepted >= slot.amount) this.signals.emit("orderFilled", { slot });
@@ -369,7 +480,7 @@ export class GameRoot {
   }
 
   _tickLines(dt) {
-    const velocity = CONFIG.BELT_RATE * dt;
+    const velocity = CONFIG.BELT_RATE * this.mods.beltMult * dt;
     for (const flowLine of this.flowLines.values()) {
       const canEject = (item) => this._canTake(flowLine, item);
       const ejected = flowLine.step(velocity, canEject);
@@ -396,9 +507,14 @@ export class GameRoot {
 
       const needed = h.needs || 1;
       if (m.outputs.length === 0 && m.inputs.length >= needed) {
-        m.charge += dt * this.speedMult;
+        m.charge += dt * this.speedMult * (this.mods.typeSpeed[m.type] || 1);
         if (m.charge >= h.chargeTime) {
           const res = h.process(m.inputs);
+          if (res && m.type === "cutter") {
+            this.cutJobs++;
+            const every = this.mods.bonusCutEvery;
+            if (every && this.cutJobs % every === 0) res.outputs = [...res.outputs, res.outputs[0]];
+          }
           if (res) {
             const used = m.inputs.length - res.left.length;
             if (h.sink) this.recycled += used;
@@ -475,7 +591,7 @@ export class GameRoot {
     const h = m.handler;
     if (!h) return "waiting";
     if (h.buffer) {
-      if (m.buffer.length >= h.capacity) return "blocked";
+      if (m.buffer.length >= this.capacityOf(m)) return "blocked";
       return m.buffer.length || m.outputs.length ? "working" : "waiting";
     }
     if (m.outputs.length > 0) return "blocked";

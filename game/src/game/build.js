@@ -42,11 +42,27 @@ function makeOverlay(world) {
  * @param {string} tool      machine type id
  * @param {Array<{x,y,r}>} tiles  from DragPath.withDirs()
  * @param {number} z         layer (1 for belt_high)
+ * @param {GameRoot} [game]   when given, power, credits and the wind rule
+ *                            are checked too, adding up along the drag
  * @returns {Array<{x,y,z,r,t,action,reason?,from?}>}
  */
-export function planPlacement(world, tool, tiles, z = 0) {
+export function planPlacement(world, tool, tiles, z = 0, game = null) {
   const overlay = makeOverlay(world);
   const plan = [];
+  const extra = { power: 0, credits: 0, free: 0 };
+  // a new piece goes here: also check the budget, and add its cost if it fits
+  const budget = (x, y) => {
+    if (!game) return null;
+    const why = game.budgetError(tool, x, y, overlay, extra);
+    if (why) return why;
+    extra.power += game.powerOf(tool);
+    const price = game.priceOf(tool);
+    if (price) {
+      if ((game.freeBuilds[tool] || 0) - extra.free > 0) extra.free++;
+      else extra.credits += price;
+    }
+    return null;
+  };
   for (const { x, y, r } of tiles) {
     const here = overlay.machineAt(x, y, z);
     const entry = { x, y, z, r, t: tool };
@@ -69,7 +85,7 @@ export function planPlacement(world, tool, tiles, z = 0) {
       }
       if (!isBelt(tool) && here.t === "belt" && z === 0 && !here.fixed) {
         overlay.set(x, y, z, null);
-        const reason = overlay.placeError(tool, x, y, r, z);
+        const reason = overlay.placeError(tool, x, y, r, z) ?? budget(x, y);
         if (reason === null) {
           overlay.set(x, y, z, { t: tool, x, y, r, z });
           plan.push({ ...entry, action: "swap", from: here.r });
@@ -82,7 +98,7 @@ export function planPlacement(world, tool, tiles, z = 0) {
       plan.push({ ...entry, action: "invalid", reason: "that tile is taken" });
       continue;
     }
-    const reason = overlay.placeError(tool, x, y, r, z);
+    const reason = overlay.placeError(tool, x, y, r, z) ?? budget(x, y);
     if (reason === null) {
       overlay.set(x, y, z, { t: tool, x, y, r, z });
       plan.push({ ...entry, action: "place" });

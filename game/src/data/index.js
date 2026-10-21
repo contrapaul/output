@@ -5,6 +5,8 @@ import operations from "../../data/operations.json" with { type: "json" };
 import items from "../../data/items.json" with { type: "json" };
 import contracts from "../../data/contracts.json" with { type: "json" };
 import plot from "../../data/plot.json" with { type: "json" };
+import power from "../../data/power.json" with { type: "json" };
+import perks from "../../data/perks.json" with { type: "json" };
 
-export const DATA = { operations, items, contracts, plot };
-export { operations, items, contracts, plot };
+export const DATA = { operations, items, contracts, plot, power, perks };
+export { operations, items, contracts, plot, power, perks };

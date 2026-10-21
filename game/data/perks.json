@@ -1,0 +1,18 @@
+{
+  "_about": "Level-up perks (Phase 3). At each milestone the player picks 1 of 3. One offer targets the weakest area (power, supply, storage, speed); the others come from different categories. 'needsCap': only offered after the city power cap. 'once': never offered again after it is taken. {type}, {material} and {item} in text are filled in when offered.",
+  "list": [
+    { "id": "solar_free", "category": "power", "needsCap": true, "name": "Free solar panels", "text": "Get 2 solar panels for free." },
+    { "id": "efficient_motors", "category": "power", "needsCap": true, "name": "Efficient motors", "text": "Every {type} uses 1 less power." },
+    { "id": "calm_winds", "category": "power", "needsCap": true, "once": true, "name": "Calm winds", "text": "Wind turbines no longer need empty space around them." },
+    { "id": "free_power", "category": "power", "needsCap": true, "rare": true, "name": "Free power", "text": "Every {type} uses no power at all." },
+    { "id": "fast_machines", "category": "speed", "name": "Faster {type}s", "text": "Every {type} works 25% faster." },
+    { "id": "belt_speed", "category": "speed", "name": "Faster belts", "text": "All belts move 10% faster." },
+    { "id": "rich_hopper", "category": "supply", "name": "Rich {material} hoppers", "text": "Your {material} hoppers give parts 50% faster." },
+    { "id": "supply_drop", "category": "supply", "name": "Supply drop", "text": "A depot full of {amount} {item} arrives near the dock." },
+    { "id": "bigger_depots", "category": "storage", "name": "Bigger depots", "text": "All depots hold 50% more." },
+    { "id": "free_depot", "category": "storage", "name": "Free depot", "text": "Get a medium depot for free." },
+    { "id": "bonus_cut", "category": "production", "once": true, "name": "Bonus cut", "text": "Every 10th cut makes one extra half." },
+    { "id": "credit_bonus", "category": "economy", "name": "Credit bonus", "text": "Earn 10% more credits from orders." },
+    { "id": "discount", "category": "economy", "once": true, "name": "Discount", "text": "Solar panels and wind turbines cost 15% less." }
+  ]
+}

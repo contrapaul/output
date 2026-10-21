@@ -1,8 +1,8 @@
 // Toolbar: the machine palette.
-// Each button shows a keyboard shortcut (1..9, 0, -) for fast selection.
+// Each button shows a keyboard shortcut (1..9, 0, -, =, [, ]) for fast selection.
 // Letters are kept free for actions (F/R rotate, Q pipette, C center, H hint).
 
-const TOOL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-"];
+const TOOL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[", "]"];
 
 export class Toolbar {
   /**
@@ -27,8 +27,9 @@ export class Toolbar {
       const btn = document.createElement("button");
       btn.className = "tool";
       btn.dataset.id = tool.id;
-      btn.setAttribute("aria-label", `${tool.name}${key ? ` (key ${key.toUpperCase()})` : ""}`);
-      btn.innerHTML = `<span class="key">${key ? key.toUpperCase() : ""}</span><span class="name">${tool.name}</span>`;
+      btn.setAttribute("aria-label", `${tool.title || tool.name}${key ? ` (key ${key.toUpperCase()})` : ""}`);
+      btn.title = tool.title || tool.name;
+      btn.innerHTML = `<span class="key">${key ? key.toUpperCase() : ""}</span><span class="name">${tool.name}</span><span class="note"></span>`;
       btn.addEventListener("click", () => this.setActive(tool.id));
       this.el.appendChild(btn);
       this.buttons.set(tool.id, btn);
@@ -45,6 +46,12 @@ export class Toolbar {
       btn.classList.toggle("active", tid === id);
     }
     this.hooks.onToolChange?.(id);
+  }
+
+  /** Small text under a tool's name (price, free builds). */
+  setNote(id, text) {
+    const btn = this.buttons.get(id);
+    if (btn) btn.querySelector(".note").textContent = text || "";
   }
 
   /** Show `id` as active without telling anyone (used by the pipette). */

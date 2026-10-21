@@ -1,5 +1,5 @@
 {
-  "_about": "Placeholder contracts (Phase 2) using abstract items. Paul replaces these with the real progression. Fields: item (canonical id), amount, creditEach (credits per part delivered), unlock (machine ids added to the toolbar when this contract is done), milestone (true: the plot grows to the next stage in plot.json and the camera pulls out).",
+  "_about": "Placeholder contracts (Phase 2) using abstract items. Paul replaces these with the real progression. Fields: item (canonical id), amount, creditEach (credits per part delivered), unlock (machine ids added to the toolbar when this contract is done), milestone (true: the plot grows to the next stage in plot.json and the camera pulls out). Phase 3: cityPower (the city's power cap from this contract on; before any contract sets it, the city covers all demand), gift (free builds, for example {\"solar\": 2}), perks (fixed perk ids for this milestone's level-up card; otherwise smart offers), supplyDrop ({ item, amount } for the supply drop perk).",
   "start": {
     "unlocked": [
       "belt"
@@ -107,14 +107,20 @@
     {
       "id": "c10",
       "title": "Stacked",
-      "brief": "Deliver 10 (M1 half + M3) + pressed M2.",
+      "brief": "Deliver 10 (M1 half + M3) + pressed M2. After this order the city cannot give us more power. We will make our own.",
       "item": "join(join(cut(m1)|m3)|press(m2))",
       "amount": 10,
       "creditEach": 4,
       "unlock": [
-        "encaser"
+        "encaser",
+        "solar",
+        "wind"
       ],
-      "milestone": true
+      "milestone": true,
+      "cityPower": 12,
+      "gift": {
+        "solar": 2
+      }
     },
     {
       "id": "c11",

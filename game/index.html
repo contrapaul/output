@@ -76,6 +76,17 @@
       }
       .tool .name { font-size: 12px; white-space: nowrap; }
       #toolbar:empty { display: none; }
+      .tool .note { font-size: 10px; color: var(--muted); }
+      .tool .note:empty { display: none; }
+      #tb-power { padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--ok) 18%, transparent); white-space: nowrap; }
+      #tb-power.high { background: color-mix(in srgb, #e0a030 30%, transparent); }
+      #perk-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 120; padding: 16px; width: min(560px, calc(100vw - 32px)); }
+      #perk-card h3 { margin: 0 0 4px; }
+      #perk-card .perks { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+      #perk-card button { text-align: left; display: block; padding: 10px; height: 100%; }
+      #perk-card .cat { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; }
+      #perk-card .pname { font-weight: 700; margin: 2px 0 4px; }
+      #perk-card .ptext { font-size: 0.85rem; }
       .tool.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
       .tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       #statusbar {

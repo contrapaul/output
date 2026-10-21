@@ -255,7 +255,7 @@ export class Input {
     if (!this.activeTool) return null;
     const path = this.drag ? this.drag.path : this.hoverTile ? new DragPath(this.hoverTile.x, this.hoverTile.y, this.ghostDir) : null;
     if (!path) return null;
-    return planPlacement(this.world, this.activeTool, this._toolTiles(path), this.ghostZ);
+    return planPlacement(this.world, this.activeTool, this._toolTiles(path), this.ghostZ, this.game);
   }
 
   _refreshGhost() {
@@ -270,7 +270,7 @@ export class Input {
 
   _build(path) {
     const tiles = this._toolTiles(path);
-    const plan = planPlacement(this.world, this.activeTool, tiles, this.ghostZ);
+    const plan = planPlacement(this.world, this.activeTool, tiles, this.ghostZ, this.game);
     const ops = applyPlan(this.game, plan);
     this.history.push(ops);
     // the next belt starts facing the way this drag ended

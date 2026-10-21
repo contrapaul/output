@@ -18,6 +18,7 @@ This plan is written for two readers:
 - **Deploys work.** Cloudflare Workers Builds (root directory `game`, `wrangler.jsonc` at the repo root) has been green since commit `b5068e6`.
 - **Phase 1 (building feels good) is done** (gate passed 2026-10-21).
 - **Phase 2 (one growing factory) is built** and waiting for the human gate (see `STATUS.md`).
+- **Phase 3 (power and rewards) is built** and waiting for the human gate (see `STATUS.md`).
 
 **Still wrong by design (fixed in Phases 1 and 2):**
 
@@ -162,7 +163,7 @@ Human gate: Paul plays from a new game through the first expansion without openi
 
 Goal: a second thing to manage and a reason to look forward to level-ups.
 
-**Design first.** The details are being worked out in `docs/power-and-rewards.md`. The local model does not start this phase until Paul marks that document "ready to build".
+**Design:** `docs/power-and-rewards.md` (ready to build, 2026-10-21). Built 2026-10-21; see `STATUS.md`.
 
 Likely tasks (to be confirmed by the design doc): power meter from the start with city supply (R6), the city cap milestone, solar and wind in the credits shop, placement blocked over the limit, level-ups with a perk choice of 1 of 3, the perk list as data, supply drops as pre-filled depots (R4), power and perk tests.
 

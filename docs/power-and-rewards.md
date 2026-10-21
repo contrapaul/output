@@ -1,6 +1,6 @@
 # Power and Rewards (design in progress)
 
-Status: draft for discussion (Paul and Claude). Not ready to build.
+Status: ready to build (Paul, 2026-10-21: "Proceed to phase 3"). Decisions in section 6.
 Source: Paul's answer to D6 in `roadmap.md`, plus D1 (level-ups expand the plot) and D3 (credits buy upgrades).
 
 The local model must not build anything from this file until Paul changes the status line above to "ready to build".
@@ -96,10 +96,11 @@ All perks are permanent for the save. A perk can be offered again if it stacks.
 - Free solar panel (placed wherever you click).
 - Efficient motors: one machine type uses 1 less power.
 - Calm winds: wind turbines no longer need empty space around them.
+- Free power (rare): one machine type uses no power. Offered at most once per type, only after the city cap.
 
 **Speed**
 - Faster machines of one type: +25% speed.
-- Faster belts in one area. (Maybe too fiddly. Possibly a global "+10% belt speed" instead.)
+- Faster belts: +10% belt speed everywhere (stacks).
 
 **Supply** (fits Paul's "delivery of a limited-supply node")
 - Rich hopper: one hopper of your choice emits 50% faster.
@@ -111,7 +112,7 @@ All perks are permanent for the save. A perk can be offered again if it stacks.
 
 **Production**
 - Bonus cut: modify machines sometimes make one extra part (for example 1 in 10). Must be deterministic: every 10th part, not random.
-- Lucky combine: every 8th combine costs one less input.
+- ~~Lucky combine~~: dropped (a combiner with one input is confusing).
 
 **Economy**
 - Credit bonus: +10% credits from contracts.
@@ -166,8 +167,18 @@ Follow-up from P2: since power never connects to production, credits are the onl
 
 Side orders (roadmap Q2 answer, R2, R3) also ease the dead end above: they pay credits from parts the player already makes.
 
-## 7. Still open (needed before Phase 3, not Phase 2)
+## 7. Phase 3 decisions (2026-10-21)
 
-1. **The moment the city caps power.** Recommendation: the cap is set to the player's current demand plus a small margin, so nothing stops working at the story moment. From then on, new machines need new power. (The other choice, a fixed cap below current demand, would switch machines off, which goes against block-placement and the no-fail rule.)
-2. **Perk pool (question 7).** Section 3.4 now has your trims. Still to decide: keep "faster belts in one area" or make it global, and whether anything is missing (for example a perk that makes one machine type cost no power).
-3. **Supply drop items:** a list of reward items per level. This can wait until you write the progression.
+| # | Decision | How it is built |
+|---|---|---|
+| P8 | City cap: **a fixed number from data** | A contract can set `cityPower`. Before any contract sets it, the city covers all demand. If the player is already over the new cap, everything keeps running, but nothing new that needs power can be placed until they add power or remove machines. |
+| P9 | Belt perk: **global +10% belt speed**, stacks | `data/perks.json` |
+| P10 | **Free power** perk for one machine type: rare, once per type, only after the city cap | `data/perks.json` |
+
+Choices Claude made while building (check these):
+- Solar panels and wind turbines are tools in the toolbar. Each costs credits when placed and gives them back when removed (so undo stays fair). This is the Phase 3 "shop". Upgrades come in Phase 4.
+- The milestone that sets the city cap also unlocks solar and wind and gives two free solar panels, so a player is never stuck with no power and no credits.
+- Wind turbines need their 8 neighbouring tiles free of machines (belts are fine). The rule works both ways: a machine cannot be placed next to a turbine either. Calm winds removes it.
+- Perks that name "one machine type" or "one hopper" choose it when offered, using what the player has built most of (shown on the card), so there is no extra picking step.
+- Supply drop: a medium depot filled with 50 of a part used in the next contract, placed on a free tile near the dock. A contract can name its own drop with `supplyDrop: { item, amount }`.
+- The level-up card does not pause the game and stays until a perk is picked. It survives a reload.

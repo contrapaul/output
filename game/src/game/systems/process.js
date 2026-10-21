@@ -33,7 +33,7 @@
 //   sink                  consumes parts (counts as recycled)
 //   inText / outText      plain words for the hover card
 
-import { operations } from "../../data/index.js";
+import { operations, power as powerData } from "../../data/index.js";
 import { isPart, isPressed, isAssembly, isShell, depth, make, DEPTH_LIMIT } from "../items.js";
 
 const OPS = {
@@ -165,6 +165,8 @@ export const PORTS = {
   depot_l: { in: [1, 2, 3], out: [0] },
   dock: { in: [0, 1, 2, 3], out: [] },
   hopper: { in: [], out: [0] },
+  solar: { in: [], out: [] },
+  wind: { in: [], out: [] },
 };
 
 /** Local side (0..3) of a machine facing r, for an absolute direction. */
@@ -194,6 +196,7 @@ export const MACHINE_NAMES = {
   dock: "Order dock",
   hopper: "Hopper",
 };
+for (const [id, def] of Object.entries(powerData.generators)) MACHINE_NAMES[id] = def.name;
 for (const [id, def] of Object.entries(operations.machines)) MACHINE_NAMES[id] = def.name;
 
 export class MachineInstance {
