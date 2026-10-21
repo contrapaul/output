@@ -159,6 +159,38 @@ export const HANDLERS = {
   },
 };
 
+// Ports (Phase 1). Sides are local to the machine's rotation:
+//   0 = front (the way it faces), 1 = right, 2 = back, 3 = left.
+// Parts only enter through `in` sides and leave through `out` sides.
+// Splitter out sides match its outDirs (front, then right).
+export const PORTS = {
+  saw: { in: [2], out: [0] },
+  press: { in: [2], out: [0] },
+  solder: { in: [1, 2, 3], out: [0] },
+  mounter: { in: [1, 2, 3], out: [0] },
+  encap: { in: [1, 2, 3], out: [0] },
+  merger: { in: [1, 2, 3], out: [0] },
+  splitter: { in: [2], out: [0, 1] },
+  bin: { in: [2], out: [0] },
+  recycler: { in: [0, 1, 2, 3], out: [] },
+  dock: { in: [0, 1, 2, 3], out: [] },
+};
+
+/** Local side (0..3) of a machine facing r, for an absolute direction. */
+export function localSide(r, absDir) {
+  return (absDir - r + 4) % 4;
+}
+
+/**
+ * Can a machine of `type` facing r take parts arriving from the neighbour in
+ * absolute direction `fromDir` (the direction from the machine to the source)?
+ */
+export function acceptsFrom(type, r, fromDir) {
+  const p = PORTS[type];
+  if (!p) return true;
+  return p.in.includes(localSide(r, fromDir));
+}
+
 export const MACHINE_NAMES = {
   belt: "Conveyor",
   belt_high: "Overhead conveyor",

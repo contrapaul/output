@@ -25,7 +25,7 @@
 import { CONFIG } from "../core/config.js";
 import { World } from "./world.js";
 import { FlowLine } from "./systems/flow.js";
-import { MachineInstance, HANDLERS, MACHINE_NAMES } from "./systems/process.js";
+import { MachineInstance, HANDLERS, MACHINE_NAMES, acceptsFrom } from "./systems/process.js";
 import { Dock } from "./systems/dock.js";
 import { Signals } from "../core/signals.js";
 import { DIRS, tileKey } from "../core/grid.js";
@@ -78,7 +78,7 @@ export class GameRoot {
 
     for (const f of contract.fixed || []) {
       if (f.t === "dock") {
-        this.world.place("dock", f.x, f.y, f.r || 0);
+        this.world.place("dock", f.x, f.y, f.r || 0, 0, true);
         this.dockPos = { x: f.x, y: f.y };
       } else if (f.t && f.t.startsWith("hopper")) {
         this.hoppers.push({
@@ -86,7 +86,7 @@ export class GameRoot {
           item: this._hopperItem(f.t), rate: 0.5, cooldown: 0,
         });
       } else {
-        this.world.place(f.t, f.x, f.y, f.r || 0);
+        this.world.place(f.t, f.x, f.y, f.r || 0, 0, true);
         if (f.t in HANDLERS) {
           this.machines.set(tileKey(f.x, f.y, 0), new MachineInstance(f.t, f.x, f.y, f.r || 0));
         }
@@ -153,10 +153,8 @@ export class GameRoot {
           if (idx !== null) {
             const target = next.get(cur.id);
             if (target) {
-              target.items.push({
-                d: Math.min(idx + e.frac, cur.length - 1),
-                item: e.item,
-              });
+              const d = Math.min(idx + e.frac, cur.length - 1);
+              target.items.push({ d, pd: d, item: e.item });
             }
             continue;
           }
@@ -198,17 +196,52 @@ export class GameRoot {
     return null;
   }
 
+  /**
+   * Remove whatever is at (x, y, z). Fixed contract pieces (the dock) cannot
+   * be removed. Parts held inside a removed machine leave the world and are
+   * counted in partsRemoved, like parts on a removed belt.
+   */
   removeMachine(x, y, z = 0) {
     const key = tileKey(x, y, z);
     const m = this.world.machineAt(x, y, z);
-    if (!m) return null;
+    if (!m || m.fixed) return null;
     const isBelt = m.t === "belt" || m.t === "belt_high";
     const snapshot = isBelt ? this._snapshotItemTiles() : null;
+    const inst = this.machines.get(key);
     this.world.remove(x, y, z);
     this.machines.delete(key);
     if (isBelt) this._resyncFlowLines(snapshot);
+    if (inst) {
+      const held = [...inst.inputs, ...inst.outputs, ...inst.buffer];
+      this.partsRemoved += held.length;
+      for (const item of held) this.signals.emit("partRemoved", { item, x, y });
+    }
     this.jam = null;
     return m;
+  }
+
+  /**
+   * Turn the piece at (x, y, z) to face r, keeping its parts. A belt is
+   * re-laid (lines re-resolve, items keep their tiles); if the new direction
+   * is not allowed the old belt is put back. Returns true on success.
+   */
+  rotateAt(x, y, z, r) {
+    const m = this.world.machineAt(x, y, z);
+    if (!m || m.fixed) return false;
+    if (m.r === r) return true;
+    if (m.t === "belt" || m.t === "belt_high") {
+      const snapshot = this._snapshotItemTiles();
+      const from = m.r;
+      this.world.remove(x, y, z);
+      let ok = !!this.world.place(m.t, x, y, r, z);
+      if (!ok) this.world.place(m.t, x, y, from, z);
+      this._resyncFlowLines(snapshot);
+      return ok;
+    }
+    const inst = this.machines.get(tileKey(x, y, 0));
+    m.r = r;
+    if (inst) inst.r = r;
+    return true;
   }
 
   // ---- economy ----------------------------------------------------------
@@ -301,7 +334,8 @@ export class GameRoot {
 
   /**
    * What sits past the tail of a flow line? Returns { kind, m | dock }
-   * or null. kind is "machine", "dock", "belt", or "empty".
+   * or null. kind is "machine", "dock", "belt", "wrongSide" (a machine
+   * whose ports do not face this belt) or "empty".
    */
   _acceptorPast(flowLine) {
     const tailTile = flowLine.line.tile(flowLine.tail);
@@ -312,6 +346,9 @@ export class GameRoot {
     const target = this.world.machineAt(nx, ny, 0) || this.world.machineAt(nx, ny, 1);
     if (!target) return { kind: "empty" };
     if (target.t === "belt" || target.t === "belt_high") return { kind: "belt", m: target };
+    // the belt touches the target on the side facing back along the belt
+    const fromDir = (tailTile.dir + 2) % 4;
+    if (!acceptsFrom(target.t, target.r, fromDir)) return { kind: "wrongSide", m: target };
     if (target.t === "dock") return { kind: "dock" };
     if (target.t in HANDLERS) {
       const m = this.machines.get(tileKey(nx, ny, 0));
@@ -448,6 +485,9 @@ export class GameRoot {
     const oy = m.y + DIRS[outDir].dy;
     const target = this.world.machineAt(ox, oy, 0) || this.world.machineAt(ox, oy, 1);
     if (!target) return false;
+    if (target.t !== "belt" && target.t !== "belt_high" && !acceptsFrom(target.t, target.r, (outDir + 2) % 4)) {
+      return false; // the next machine has no input port on this side
+    }
     if (target.t === "belt" || target.t === "belt_high") {
       const line = this.world.lines.lineForTile(ox, oy, target.z);
       const flowLine = line && this.flowLines.get(line.id);
@@ -477,6 +517,37 @@ export class GameRoot {
       return true;
     }
     return false;
+  }
+
+  /**
+   * What a machine is doing, for the renderer and the hover card:
+   *   "blocked"  it has finished parts it cannot send out (or a full bin)
+   *   "working"  it has what it needs and is making something
+   *   "waiting"  it needs more parts
+   */
+  machineState(m) {
+    const h = m.handler;
+    if (!h) return "waiting";
+    if (h.buffer) {
+      if (m.buffer.length >= this.binCapacity()) return "blocked";
+      return m.buffer.length || m.outputs.length ? "working" : "waiting";
+    }
+    if (m.outputs.length > 0) return "blocked";
+    if (m.inputs.length >= (h.needs || 1)) return "working";
+    return "waiting";
+  }
+
+  /** Belt tails that end against a machine side with no input port. */
+  wrongSideEnds() {
+    const out = [];
+    for (const fl of this.flowLines.values()) {
+      const a = this._acceptorPast(fl);
+      if (a && a.kind === "wrongSide") {
+        const t = fl.line.tile(fl.tail);
+        out.push({ x: t.x, y: t.y, dir: t.dir, z: t.z || 0 });
+      }
+    }
+    return out;
   }
 
   // ---- jam detection (H key) -------------------------------------------

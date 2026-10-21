@@ -33,17 +33,25 @@ Open `http://localhost:5173/` for the level select screen.
 
 | Input | Action |
 |---|---|
-| Q | select conveyor |
-| E | select saw (Tutorial B) |
-| left-click | place / select |
-| F | rotate |
+| 1 to 9, 0, - | pick a tool from the toolbar |
+| left-drag with a tool | draw a path, release to build (belts follow the path and turn corners; machines repeat) |
+| drop a machine on a belt | inserts the machine into the line |
+| F or R (Shift to reverse) | rotate the ghost, or the selected piece in place |
+| left-click, no tool | select a piece |
+| left-drag, no tool | pan |
+| right-click with a tool / Esc | put the tool away |
+| right-click on a piece | remove it |
+| right-drag | remove everything in a box |
+| middle-click or Q | pipette: pick up that piece's tool and rotation |
 | Delete | remove selected |
-| Ctrl+Z | undo |
+| Ctrl+Z, Ctrl+Shift+Z (or Ctrl+Y) | undo, redo (a whole drag is one step) |
 | Space | pause/resume |
-| right-click / Esc | cancel / deselect |
-| left-drag (no tool) | pan |
+| . | speed 1x / 2x |
+| H | hint |
 | wheel | zoom |
 | C | center camera |
+
+Add `?perf=1` to the URL for a frame-time overlay.
 
 ## Architecture
 
@@ -60,7 +68,10 @@ src/
     line.js            # belt lines (incremental place/remove/split/splice)
     camera.js          # pan/zoom
     renderer.js        # canvas: grid, belts, machines, items, hoppers, dock
-    input.js           # mouse + keyboard
+    input.js           # mouse + keyboard (drag build, area delete, pipette)
+    dragpath.js        # drag path builder (corners, back-tracking)
+    build.js           # plan/apply multi-tile placement, area delete
+    history.js         # undo/redo stack
     art.js             # vector item icons
     items.js           # item registry + canonical encoding
     root.js            # GameRoot: tick orchestrator

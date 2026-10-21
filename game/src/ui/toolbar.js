@@ -1,7 +1,8 @@
-// Toolbar: the machine palette. M0 has only `belt`.
-// Each button shows a keyboard shortcut (Q..O) for fast selection.
+// Toolbar: the machine palette.
+// Each button shows a keyboard shortcut (1..9, 0, -) for fast selection.
+// Letters are kept free for actions (F/R rotate, Q pipette, C center, H hint).
 
-const TOOL_KEYS = ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a"];
+const TOOL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-"];
 
 export class Toolbar {
   /**
@@ -46,10 +47,16 @@ export class Toolbar {
     this.hooks.onToolChange?.(id);
   }
 
+  /** Show `id` as active without telling anyone (used by the pipette). */
+  mark(id) {
+    this.active = id;
+    for (const [tid, btn] of this.buttons) btn.classList.toggle("active", tid === id);
+  }
+
   _bindKeys() {
     this._onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+      if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
       const k = e.key.toLowerCase();
       const idx = TOOL_KEYS.indexOf(k);
       if (idx === -1) return;

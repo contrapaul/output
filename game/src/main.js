@@ -92,6 +92,7 @@ const saveSys = new SaveSystem();
 let save = saveSys.load(); // may be null; refreshed by persist()
 
 let game, camera, renderer, input, toolbar, loop;
+const perf = new URLSearchParams(window.location.search).has("perf") ? makePerfOverlay() : null;
 let currentLevelId = null;
 let cardTimer = null;
 
@@ -124,16 +125,18 @@ function bootLevel(levelId, opts = {}) {
   toolbar = new Toolbar(toolbarEl, tools, { onToolChange: (id) => input?.setTool(id) });
 
   input = new Input(canvas, camera, game, renderer, {
-    onToolChange: (id) => status(id ? `${MACHINE_NAMES[id] || id}  (F rotate, Esc cancel)` : "no tool"),
+    onToolChange: (id) => {
+      toolbar.mark(id);
+      status(id ? `${MACHINE_NAMES[id] || id}: click or drag to build. F rotates. Right-click to put it away.` : "Drag to move around. Right-drag to remove things.");
+    },
     onStatus: status,
     onSelect: (sel) => (sel ? showCard(sel) : hideCard()),
+    onHover: showTooltip,
+    onChange: () => { game.jam = null; persist(); },
+    canUseTool: (t) => contract.unlocked.includes(t),
   });
   input.attach();
 
-  game.world.signals.on("machinePlaced", () => {
-    game.jam = null;
-    persist();
-  });
   game.signals.on("itemAccepted", () => persist());
   game.signals.on("contractComplete", (info) => showComplete(contract, info));
   game.signals.on("upgradeBought", () => { persist(); renderShop(); });
@@ -141,7 +144,11 @@ function bootLevel(levelId, opts = {}) {
   loop = new GameLoop({
     hz: CONFIG.SIM_HZ,
     tick: () => game.tick(),
-    render: () => renderer.render(),
+    render: (dt, alpha) => {
+      const t0 = performance.now();
+      renderer.render(game.paused ? 1 : alpha);
+      if (perf) perf.sample(performance.now() - t0, game);
+    },
   });
   loop.start();
 
@@ -387,6 +394,84 @@ function hideCard() {
   if (cardTimer) { clearInterval(cardTimer); cardTimer = null; }
 }
 
+// ---- hover tooltip ---------------------------------------------------------
+
+const STATE_TEXT = {
+  working: "working",
+  waiting: "waiting for parts",
+  blocked: "stuck: it cannot send its parts out",
+};
+
+function hoverLines(x, y) {
+  const lines = [];
+  const hopper = game.hoppers.find((h) => h.x === x && h.y === y);
+  if (hopper) {
+    lines.push(`<strong>Hopper</strong>`, `Gives a ${getItem(hopper.item)?.name || hopper.item} every ${Math.round(1 / hopper.rate)} seconds.`);
+  }
+  for (const w of game.world.stackAt(x, y).reverse()) {
+    if (w.t === "belt" || w.t === "belt_high") {
+      const line = game.world.lines.lineForTile(x, y, w.z);
+      const fl = line && game.flowLines.get(line.id);
+      const idx = line ? line.index(line.tiles.find((t) => t.x === x && t.y === y)?.key) : null;
+      const n = fl && idx !== null ? fl.items.filter((it) => Math.floor(it.d) === idx).length : 0;
+      lines.push(`<strong>${MACHINE_NAMES[w.t]}</strong>`, n ? `Carrying ${n} ${n === 1 ? "part" : "parts"}.` : "Moves parts the way the arrow points.");
+    } else if (w.t === "dock") {
+      const d = game.dock;
+      lines.push(`<strong>${MACHINE_NAMES.dock}</strong>`, d ? `Needs ${getItem(d.target)?.name || d.target}: ${d.accepted} of ${d.amount}.` : "Takes finished products.");
+    } else {
+      const m = game.machines.get(x + "," + y);
+      const h = m?.handler;
+      if (!h) continue;
+      lines.push(`<strong>${MACHINE_NAMES[w.t] || w.t}</strong>`, `Takes ${h.inText}.`, `Makes ${h.outText}.`, `Now: ${STATE_TEXT[game.machineState(m)]}.`);
+    }
+  }
+  return lines;
+}
+
+function showTooltip(tile, sx, sy) {
+  let el = document.getElementById("tooltip");
+  if (!tile || !game) { if (el) el.hidden = true; return; }
+  const lines = hoverLines(tile.x, tile.y);
+  if (!lines.length) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "tooltip";
+    el.style.cssText = "position:absolute;pointer-events:none;background:var(--panel);color:var(--ink);padding:6px 9px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.2);font-size:0.8rem;line-height:1.35;max-width:240px;z-index:60;";
+    document.body.appendChild(el);
+  }
+  el.hidden = false;
+  el.innerHTML = lines.join("<br>");
+  const rect = canvas.getBoundingClientRect();
+  const left = Math.min(rect.left + sx + 16, window.innerWidth - el.offsetWidth - 8);
+  const top = Math.min(rect.top + sy + 16, window.innerHeight - el.offsetHeight - 8);
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
+// ---- perf overlay (?perf=1) ------------------------------------------------
+
+function makePerfOverlay() {
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;right:12px;top:12px;background:rgba(0,0,0,0.7);color:#fff;font:12px ui-monospace,monospace;padding:6px 8px;border-radius:6px;z-index:80;white-space:pre;";
+  document.body.appendChild(el);
+  let samples = [];
+  let last = performance.now();
+  return {
+    sample(ms, g) {
+      samples.push(ms);
+      const now = performance.now();
+      if (now - last < 500) return;
+      const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+      const max = Math.max(...samples);
+      const fps = (samples.length * 1000) / (now - last);
+      el.textContent = `render avg ${avg.toFixed(2)} ms  max ${max.toFixed(2)} ms\nfps ${fps.toFixed(0)}  items ${g.itemCount()}`;
+      window.__perf = { avg, max, fps, items: g.itemCount() };
+      samples = [];
+      last = now;
+    },
+  };
+}
+
 // ---- top bar ---------------------------------------------------------------
 
 function refreshTopbar() {
@@ -459,8 +544,7 @@ window.addEventListener("keydown", (e) => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA")) return;
   if (e.key === " ") { e.preventDefault(); togglePause(); }
   else if (e.key === "h" || e.key === "H") fireHint();
-  else if (e.key === "1") setSpeed(1);
-  else if (e.key === "2") setSpeed(2);
+  else if (e.key === ".") setSpeed(loop?.speed === 2 ? 1 : 2);
 });
 
 window.addEventListener("beforeunload", () => { if (game) saveSys.save(game); });
@@ -477,4 +561,4 @@ if (urlLevel && (LEVELS[urlLevel] || FREE_CONTRACTS.some((f) => f.id === urlLeve
   showLevelSelect();
 }
 
-window.__output = { get game() { return game; }, saveSys, bootLevel, showLevelSelect, status, LEVELS, FREE_CONTRACTS };
+window.__output = { get game() { return game; }, get camera() { return camera; }, get input() { return input; }, saveSys, bootLevel, showLevelSelect, status, LEVELS, FREE_CONTRACTS };

@@ -19,6 +19,10 @@
 // only leaves a line when the acceptor can take that specific item.
 //
 // Conservation law: items in world = emitted - accepted - recycled.
+//
+// Smooth motion (Phase 1): each item keeps pd, its distance before the last
+// step. The renderer draws at pd + (d - pd) * alpha, where alpha is how far
+// the clock is between two ticks.
 
 import { CONFIG } from "../../core/config.js";
 import { DIRS } from "../../core/grid.js";
@@ -80,7 +84,7 @@ export class FlowLine {
     if (!this.canAcceptAt(d)) return false;
     let i = 0;
     while (i < this.items.length && this.items[i].d < d) i++;
-    this.items.splice(i, 0, { d, item: itemId });
+    this.items.splice(i, 0, { d, pd: d, item: itemId });
     return true;
   }
 
@@ -95,6 +99,8 @@ export class FlowLine {
   step(velocity, canEject) {
     velocity += this.velCarry;
     this.velCarry = 0;
+    // remember where each item was, so the renderer can draw between ticks
+    for (const it of this.items) it.pd = it.d;
     const ejected = [];
     const exitD = this.length - 1; // items exit when they reach the last tile
 
@@ -167,7 +173,7 @@ export class FlowLine {
    */
   requeueAtTail(itemId) {
     const d = Math.max(0, this.length - 1);
-    this.items.push({ d, item: itemId });
+    this.items.push({ d, pd: d, item: itemId });
     this.items.sort((a, b) => a.d - b.d);
   }
 

@@ -38,7 +38,8 @@ export class GameLoop {
         this.tickCount++;
         n++;
       }
-      this.render(delta);
+      // alpha: how far between the last tick and the next (for smooth motion)
+      this.render(delta, Math.min(this.accumulator / step, 1));
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);

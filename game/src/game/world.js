@@ -33,7 +33,7 @@ export class World {
   // ---- world interface used by LineManager ----------------------------
 
   beltAt(x, y, z = 0) {
-    const m = this.machines.get(tileKey(x, y, z));
+    const m = this.machineAt(x, y, z);
     if (!m) return null;
     return BELT_TYPES.has(m.t) ? { x: m.x, y: m.y, z, dir: m.r } : null;
   }
@@ -57,37 +57,48 @@ export class World {
   }
 
   canPlace(t, x, y, r, z = 0) {
-    if (!inZone(x, y, this.zone)) return false;
-    if (this.machines.has(tileKey(x, y, z))) return false;
+    return this.placeError(t, x, y, r, z) === null;
+  }
+
+  /**
+   * Why can `t` not go at (x, y, z) facing r? Returns a short grade 7
+   * reason, or null when placement is allowed. Uses only machineAt/beltAt,
+   * so a planning overlay (build.js) can reuse it for whole drag paths.
+   */
+  placeError(t, x, y, r, z = 0) {
+    if (!inZone(x, y, this.zone)) return "outside the build area";
+    if (this.machineAt(x, y, z)) return "that tile is taken";
 
     if (BELT_TYPES.has(t)) {
       if (t === "belt") {
         // ground belt: tile must be fully clear (no overhead on top)
-        if (this.machines.has(tileKey(x, y, 1))) return false;
+        if (this.machineAt(x, y, 1)) return "an overhead belt is above this tile";
       } else {
         // overhead belt: over empty ground or over a ground belt only
         const ground = this.machineAt(x, y, 0);
-        if (ground && !BELT_TYPES.has(ground.t)) return false;
+        if (ground && !BELT_TYPES.has(ground.t)) return "overhead goes over empty space or a ground belt";
       }
       // no second feeder, follower must be unfed, no loop
-      if (this._countFeeders(x, y, z) > 1) return false;
+      if (this._countFeeders(x, y, z) > 1) return "two belts cannot feed one belt";
       const fx = x + DIRS[r].dx;
       const fy = y + DIRS[r].dy;
       if (this.beltAt(fx, fy, z)) {
-        if (this._countFeeders(fx, fy, z) > 0) return false;
-        if (wouldCreateCycle(this, x, y, z, r)) return false;
+        if (this._countFeeders(fx, fy, z) > 0) return "two belts cannot feed one belt";
+        if (wouldCreateCycle(this, x, y, z, r)) return "that would close a loop";
       }
-      return true;
+      return null;
     }
 
     // machines and dock: ground layer only
-    if (z !== 0) return false;
-    return true;
+    if (z !== 0) return "machines go on the ground";
+    if (this.machineAt(x, y, 1)) return "an overhead belt is above this tile";
+    return null;
   }
 
-  place(t, x, y, r, z = 0) {
+  place(t, x, y, r, z = 0, fixed = false) {
     if (!this.canPlace(t, x, y, r, z)) return null;
     const m = { t, x, y, r, z: z || 0 };
+    if (fixed) m.fixed = true; // part of the contract: cannot be moved or removed
     this.machines.set(tileKey(x, y, z), m);
     if (BELT_TYPES.has(t)) this.lines.placeBelt(x, y, z, r);
     this.signals.emit("machinePlaced", m);
