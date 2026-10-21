@@ -1,73 +1,86 @@
-# Output: Roadmap v2 (from engine prototype to a fun game)
+# Output: Roadmap v3 (from engine prototype to a fun game)
 
-Status: draft for review (2026-10-15)
+Status: active (updated 2026-10-21 after Paul's decisions D1 to D9)
 Replaces: the milestone section of `development-plan.md` (sections 8 and 11) and `game/MILESTONES.md`.
 Still valid: `concepts.md` (design intent, Paul's brief), `development-plan.md` sections 1 to 7 except where this document overrides them.
+Companion: `docs/power-and-rewards.md` (design in progress, Paul and Claude).
 
 This plan is written for two readers:
 
-- **Paul** decides direction, plays the builds, and signs off on human gates.
+- **Paul** decides direction, writes the product tree and progression, plays the builds, and signs off on human gates.
 - **The local model** writes all game code, one task at a time, following the working rules in section 9.
 
 ---
 
 ## 1. Where we are
 
-**Keep (solid):** the belt line engine (`line.js`, `flow.js`), the tail-first flow with backpressure, the recipe-string item model, the fixed 30 Hz tick, versioned saves with migrations, the zero-dependency static build.
+- **Phase 0 (repair) is done.** Items survive edits, the splitter no longer duplicates, credits are real numbers, conservation is tested (86 tests). Paul played it on 2026-10-21: "it works but of course is extremely barebones." Human gate passed.
+- **Deploys work.** Cloudflare Workers Builds (root directory `game`, `wrangler.jsonc` at the repo root) has been green since commit `b5068e6`.
+- **Next: Phase 1 (building feels good).**
 
-**Broken (fix first):**
-
-| Bug | Where | Effect |
-|---|---|---|
-| Any placement wipes all belt items | `root.js _rebuildFlowLines()` clears every FlowLine and makes new empty ones | Building while the factory runs destroys parts |
-| Splitter duplicates parts | `process.js HANDLERS.splitter` returns two copies | Creates parts from nothing, wrong lesson, breaks units 5 and 8 |
-| Credits earned shows NaN | `root.js` uses `coinsEarnHere` and `coinsEarnedHere` | Wrong number on the complete screen |
-| No click-and-drag belt placement | `input.js` places one tile on mouse up | Building a line is slow and tedious |
-
-**Wrong by design (change):**
+**Still wrong by design (fixed in Phases 1 and 2):**
 
 - "Choose a contract" level select. The game should hand out the next contract when the last one is done, as in Satisfactory.
-- Each level is a separate small factory that freezes when the order is filled. Nothing carries forward, so nothing grows.
-- 10 items in one straight chain. There is no room to scale.
-- Machines take parts from any side and have no visible ports.
-- Status docs claim milestones are met when the human checks never happened.
+- Each level is a separate small factory that freezes when the order is filled. Nothing carries forward.
+- No click-and-drag placement. Machines take parts from any side and have no visible ports.
+- Items and recipes are hard-coded, so content cannot be changed without code.
 
 ---
 
-## 2. The target game (one paragraph)
+## 2. The target game
 
-You run one factory plot that keeps growing. The Order Terminal (the dock, upgraded) always shows your current contract. Deliver it and the next contract arrives, along with a reward: a new machine, a bigger plot, a faster belt, or a perk choice. Early contracts are tiny and teach one idea each (they replace the tutorial levels). Later contracts ask for more parts, new products built from parts you already make, and steady rates ("keep 6 boards per minute flowing"). Your old lines keep running and keep paying, so the factory you built an hour ago still matters. A 30-minute class session moves you forward a tier, and the save carries over to the next session.
+You run one factory that keeps growing. The Order Dock always shows the current contract. Deliver it and you earn credits, and the next contract arrives. At milestones you level up: the plot expands, the camera pulls back to reveal new land and new hoppers, and you choose one of three perks. Credits buy upgrades and power. Machines need power, so growing the factory means growing your power supply too. Storage depots let you stockpile parts and move supply closer to where you need it, which becomes important as products get more complex. A 30-minute class session moves you forward a level or two, and the save carries over.
 
 ### Satisfactory and shapez ideas we use (patterns only, no assets)
 
 | Idea | Source | How Output uses it |
 |---|---|---|
 | Next goal assigned when the last is done | shapez hub levels, Satisfactory HUB milestones | Contract queue in data, auto-advance |
-| Rewards unlock capabilities | shapez `tutorial_goals.js` rewards | Each contract names its reward |
-| Pay for upgrades with products | shapez upgrade shop, Satisfactory milestones | Upgrades cost delivered parts (see decision D3) |
-| Resource nodes and extractors | shapez `systems/miner.js`, Satisfactory nodes | Supply nodes on the plot, Intakes placed on them |
-| Belt speed tiers | both games | Conveyor Mk1, Mk2, Mk3 as upgrades |
-| Land that opens up as you progress | Satisfactory exploration | Plot expansions as rewards |
-| A sink that buys anything | Satisfactory AWESOME sink | Market tile: any finished product earns credits |
+| Rewards unlock capabilities | shapez `tutorial_goals.js` rewards | Contracts and level-ups name their reward |
+| Storage that becomes a source | Satisfactory storage containers | Storage depots (D2, D9) |
+| Power as a building limit | Satisfactory power grid | Power budget (see `docs/power-and-rewards.md`) |
+| Belt speed tiers | both games | Conveyor Mk1, Mk2, Mk3 bought with credits |
+| Land that opens up as you progress | Satisfactory exploration | Plot expansions at level-up (D1) |
+| Operations on any item | shapez cutter, rotater, stacker | Generic operations with abstract items while building (D5) |
 | Production stats | shapez `production_analytics.js` | Items per minute on machine cards and a stats panel |
 
 ---
 
-## 3. Decisions for Paul (needed before the phase noted)
+## 3. Decisions (Paul's answers, 2026-10-21)
 
-Each has a recommendation. A one-line answer is enough.
+Paul's words, kept as written:
+
+- **D1:** Expanding plot, grows to a size where the player must zoom out a fair bit to see everything. Expands at completion/leveling milestones. The camera should gently pull out each time, to reveal the new nodes and expanded area.
+- **D2:** Fixed hoppers. We'll borrow Satisfactory's storage depots as a way to "create nodes" by routing materials to better locations and having them stack up in different size storage depots.
+- **D3:** Credits pay for upgrades, delivered parts reward credits and unlock progression.
+- **D4:** Once the game contains all building blocks, most machines, etc I will hand-write the actual sequence of progression and story. The old levels can go, as they are not likely to be useful for testing as we build.
+- **D5:** I will draft the entire product tree and sequence as noted. While building and testing it is 100% acceptable, and indeed likely beneficial, to use variables or numbers, IE material 1 and material 2 combine to create item 1, or other even more streamlined process. As long as we have the ability to modify, combine, and other functions then the specific items only matter near the end.
+- **D6:** When players level up I'd like them to have a choice of perks adding a secondary reward to the progression. The choices are simple modifiers, but we need to brainstorm the best options for them. One direction we can go is adding a power component that gates how many machines can be built. This adds another way to spend credits (buying solar panels, wind turbines) and also adds to the story element. A player who struggles with power would be thrilled to have a solar panel offered as a level-up choice, and players who have invested in power might instead choose an increase in production speed or "delivery" of a limited-supply node.
+- **D7:** There is no sharing of laptops, and 3 slots are not needed. A 'new game' is enough, but we can include challenge modes and achievements to keep it fresh.
+- **D8:** Vector art as noted is good. Ideally the materials and products are scalable such that the 'order' received following each completion can show larger products but we can still make out what they are on the conveyor belts as they are processed and combined.
+- **D9:** The dock cannot store items, but storage crates/depots can. As players realize that they will be processing materials into more and more complex items they should organically realize the benefits of storing produced items to save for future production.
+
+### What the decisions change in the plan
+
+| Decision | Change |
+|---|---|
+| D1 | Phase 2 adds plot expansion with a camera pull-out. Rendering must stay fast and readable when zoomed far out (draw only what is visible, simpler drawing at low zoom). |
+| D2 | No Intakes. Hoppers are fixed, and new ones appear in expanded land. Storage depots (small, medium, large) arrive in Phase 2: they take parts in, stack them, and feed them out like a hopper. |
+| D3 | Credits come from contract deliveries. The shop (credits) sells upgrades, generators and depots. The Market tile is dropped. |
+| D4 | Old levels and the level select are deleted in Phase 2. Placeholder contracts drive testing until Paul writes the real progression. Onboarding moves after content (Phase 6), because it is written into Paul's contracts. |
+| D5 | Recipes and items move into data in Phase 2 (not Phase 5). Development uses abstract materials (M1, M2...) and operations (modify, combine). Real names and art are a data layer added on top. |
+| D6 | New Phase 3: power and rewards, designed together first (`docs/power-and-rewards.md`). Perks are offered at level-up. |
+| D7 | One save, plus export and import. Main menu: Continue, New game, Settings, Sandbox. Challenges and achievements go in "Later". |
+| D8 | Item icons are built from the recipe tree, so any item can be drawn at belt size (small, simplified) or order size (large, full detail). Needed from Phase 2. |
+| D9 | The dock accepts only the current contract's item. Anything else stops at the dock (the jam is the feedback). Depots are the only storage. |
+
+### Open questions (new)
 
 | # | Question | Recommendation | Needed by |
 |---|---|---|---|
-| D1 | Map: fixed large plot, or a plot that expands as a reward? | Expanding plot. Starts about 16x12, grows in steps to about 48x32. It feels like growth and keeps performance safe. | Phase 2 |
-| D2 | Raw materials: fixed hoppers at the edge, or supply nodes the player builds Intakes on? | Nodes plus Intakes. Placing your own source is where the scaling starts (more Intakes, faster Intakes). | Phase 2 |
-| D3 | What pays for upgrades: credits, or delivered parts? | Both. Contracts and upgrades cost parts (Satisfactory style, ties economy to production). Credits come from the Market and buy perks and one-use boosts. | Phase 4 |
-| D4 | Keep the old hand-built levels? | Turn the tutorial ones into the first contracts. Keep the rest as optional "Challenges" (bounded puzzles) after release. | Phase 2 |
-| D5 | Product tree (section 7 draft) | Paul edits names and recipes. The engine only needs the shape of the tree locked. | Phase 5 |
-| D6 | Perks ("rogue-like choices" from the brief): how many, and do they reset? | Pick 1 of 3 at the end of each tier. Kept for the save. Never required. | Phase 4 |
-| D7 | Save slots | 3 named slots plus export/import. Class laptops get shared. | Phase 2 |
-| D8 | Art control (see section 6) | Vector art driven by one style file Paul can edit, plus an optional PNG override per sprite. | Phase 6 |
-| D9 | The brief says the dock bounces wrong items back. With one growing factory and upgrades paid in parts, should the Terminal store non-contract parts instead? | Store them. Wrong parts still show clearly in the terminal panel ("not needed now, stored"), but they no longer jam the main line. Keep the bounce rule for Challenges. | Phase 2 |
+| Q1 | Should the operations be open (any part can be cut, pressed or joined, like shapez) or limited to a recipe list (like Satisfactory)? | Build the engine open, with an optional recipe list that limits which operations each machine allows. Paul chooses per machine when writing content. | Phase 2 |
+| Q2 | Once a contract is filled, extra copies of that product earn nothing. Should old lines keep earning somehow? | Yes, a small amount: the dock pays a reduced rate for any product from a past contract. Without this, old lines become dead weight. | Phase 3 |
+| Q3 | Power, level-ups and perk design | Being worked out together in `docs/power-and-rewards.md` | Phase 3 |
 
 ---
 
@@ -75,19 +88,7 @@ Each has a recommendation. A one-line answer is enough.
 
 Each phase has: a goal, tasks, **automatic checks** (the model must make these pass) and a **human gate** (only Paul can mark it). A phase is not done until both pass. Sizes are relative: S, M, L.
 
-### Phase 0: Repair and re-baseline (S)
-
-Goal: the engine does what the docs say, and the docs tell the truth.
-
-Tasks:
-1. Fix the item wipe. Placing or removing a belt must keep every item on lines that did not change. On a split, items go to the piece that now holds their tile. On a merge, items join in order with their distances shifted. Items on a removed tile go back to the player's stock (or are deleted with a short "part removed" puff; pick one and document it).
-2. Fix the splitter. One part in, one part out, sent to the next output that has room (alternating when both have room).
-3. Fix the `coinsEarnHere` typo.
-4. Add regression tests: edit while running (place, remove, rotate in the middle of a full line), a conservation test that includes the splitter, merger, bin and recycler, and a test for the credits earned value.
-5. Make one `STATUS.md` (template in section 9), and delete the status sections from `game/README.md` and `game/MILESTONES.md`.
-
-Automatic checks: all tests pass, including a new conservation test: `items in world = emitted - delivered - recycled` after 5 minutes of a random edit script on the sandbox.
-Human gate: Paul builds a line, edits it while parts are moving, and nothing vanishes.
+### Phase 0: Repair and re-baseline (S) ✅ done 2026-10-21
 
 ### Phase 1: Building feels good (M)
 
@@ -98,111 +99,116 @@ Read first (patterns only): shapez `hud/parts/building_placer_logic.js` (drag, d
 Tasks:
 1. **Drag to place belts.** Hold left mouse and drag. The path locks to one axis, then turns at the corner when the mouse turns. Each belt points toward the next tile in the drag. Preview the whole path as ghosts before release. Invalid tiles show red with a reason.
 2. **Drag to place machines** repeats the machine along the drag (useful for rows of saws).
-3. **Delete by right-drag** over an area (box select), plus the existing Delete key. Remove the "no cost, no friction" gap: deleting should be as fast as building.
+3. **Delete by right-drag** over an area (box select), plus the existing Delete key. Deleting should be as fast as building.
 4. **Rotate before and after placing.** F (and R) rotates the ghost; the last rotation is kept for the next placement. Selecting a placed machine and pressing F rotates it in place without losing its parts.
-5. **Pipette.** Middle-click or Q over a placed thing picks that tool with that rotation.
+5. **Pipette.** Middle-click over a placed thing picks that tool with that rotation.
 6. **Ports.** Every machine defines input ports and output ports by side (back, left, right, front). Draw them as small arrows on the machine. Parts can only enter through input ports. Belts that end at a wrong side show a red marker.
 7. **Smooth motion.** Interpolate item positions between ticks (render alpha from the loop). No jitter at 60 fps.
 8. **Undo and redo** with a stack of at least 50 actions, including drags and area deletes as single steps.
 9. **Hover info.** Hovering any tile shows a small tooltip: name, what it takes, what it makes, state (working, waiting for input, output blocked).
 10. **Machine states at a glance.** Working: gentle pulse. Waiting for input: dim. Output blocked: amber outline. These replace the "!" badge.
 
-Automatic checks: unit tests for the drag path builder (straight, one corner, back-tracking, through blocked tiles), ports accept and reject, undo/redo round trips. Frame time under 8 ms with 300 items on screen (logged by a `?perf=1` overlay).
+Not in this phase: the level select and old levels stay as they are until Phase 2 removes them. Do not build power, perks or contracts yet.
+
+Automatic checks: unit tests for the drag path builder (straight, one corner, back-tracking, through blocked tiles), ports accept and reject, undo/redo round trips, rotating a machine in place keeps its parts. Frame time under 8 ms with 300 items on screen (logged by a `?perf=1` overlay).
 Human gate: Paul draws a 20-tile belt with two corners in one drag, rebuilds a broken line in under 30 seconds, and says it "feels right".
 
-### Phase 2: One growing factory with assigned contracts (L)
+### Phase 2: One growing factory (L)
 
-Goal: the structural change. No more level select. One plot, a contract queue, rewards.
+Goal: the structural change. One plot that grows, contracts that arrive on their own, content in data.
 
-Read first: shapez `hub_goals.js`, `modes/regular.js` (goal list with growing amounts and rewards), `systems/miner.js`, `hud/parts/unlock_notification.js`, `hud/parts/pinned_shapes.js`.
-
-Tasks:
-1. **Contracts as data** in `game/data/contracts.json`: `{ id, tier, title, brief, requires: [{ item, amount }], reward: { unlock?, expand?, upgrade?, perkChoice? }, hint }`. Ordered list. Validate on load (known items, reachable with machines unlocked so far).
-2. **Order Terminal.** The dock becomes a fixed 2x2 building on the plot that accepts anything from any side. Parts that match the current contract count toward it. Everything else goes into storage (counts for later upgrades, see D3) instead of jamming the belt. The terminal panel always shows the current contract, progress bars, and the reward.
-3. **Auto-advance.** When a contract is filled: short celebration, reward applied, unlock card ("New machine: Solder station. It joins a die and a coil into a board."), next contract appears. No menu in between.
-4. **Supply nodes and Intakes** (if D2 accepted). Nodes are fixed on the plot (silicon, copper, battery, housing at first). The Intake is placed on a node and outputs at a set rate. Remove fixed hoppers.
-5. **Plot expansions** (if D1 accepted). The plot grows by rings or sides as contract rewards. New nodes appear in new land.
-6. **Persistent save v3.** One plot per slot: machines, belts, items in transit (now cheap to save, since the engine keeps them), contract index, storage, unlocks. Migrate v2 saves by starting a new plot and keeping credits.
-7. **Main menu** becomes: Continue, New factory, Load (slots), Settings, Sandbox. Level select removed.
-8. **First 12 contracts** (Novice tier) rebuilt from the tutorial levels: move ingots, cut wafers, cut dies, press coils, merge two lines, solder a board, and so on. One new idea per contract.
-
-Automatic checks: a headless run of the first 12 contracts using reference layouts stored in `test/fixtures/` (each contract must complete within a set number of simulated minutes). Save, reload, and continue gives the same state, items in transit included.
-Human gate: Paul plays from a new factory to the end of Novice without opening a menu, and wants to see the next contract.
-
-**Fun checkpoint.** After Phase 2, Paul and one or two students play for 20 minutes. If it is not fun yet, fix that before adding content (go back to Phase 1 items or contract pacing). Write what was learned in `STATUS.md`.
-
-### Phase 3: Onboarding inside the contracts (M)
-
-Goal: a grade 7 student learns by playing, with almost no reading.
-
-Read first: shapez `hud/parts/interactive_tutorial.js`, `hud/parts/tutorial_hints.js`.
+Read first: shapez `hub_goals.js`, `modes/regular.js` (goal list with growing amounts and rewards), `hud/parts/unlock_notification.js`, `hud/parts/pinned_shapes.js`, `game/map_chunk_view.js` (drawing only what is visible).
 
 Tasks:
-1. Early contracts carry **guided steps** in their data: `steps: [{ when, show, highlight }]`. Example: "Drag a conveyor from the Intake to the Terminal" with a pulsing arrow on the Intake and the Terminal. Each step disappears when the player has done it.
-2. Steps only appear for the first contract that teaches each idea. Later contracts just show the brief and the recipe.
-3. **Jam help** (the H key, plus a button that appears after 20 seconds with no progress): highlights the stuck machine and traces upstream to the cause in plain words.
-4. **Recipe view** on the terminal: the target product as a tree of icons (board = die + coil, soldered), with the machine for each step.
-5. Every line of text checked: grade 7, short sentences, no em dashes (keep the automated test that rejects em dashes in all data files).
+1. **Abstract items and operations (D5, Q1).** Raw materials `m1` to `m4`, each with a color. Machines are operations: *modify* (one in, changes form, for example `cut(m1)`), *split* (one in, two out), *combine* (two in, one assembly, for example `join(a|b)`), *encase* (assembly into a shell). Item ids stay canonical strings. A `data/items.json` name layer can give any id a real name and art later; ids without a name show a generated label (for example "M1, cut twice").
+2. **Recipes as data** in `data/recipes.json`. Each machine either allows any input (open) or only listed recipes (limited), per Q1. Remove the hard-coded handlers for each item.
+3. **Icons from the recipe tree (D8).** One drawing function builds any item from its tree: material color plus form shape for parts, nested layout for assemblies. Two levels of detail: belt size (simple silhouette plus color) and order size (full tree visible). Test page `?art=1` shows every item at both sizes.
+4. **Contracts as data** in `data/contracts.json`: `{ id, title, brief, requires: { item, amount }, credits, unlock?, milestone? }`. Ordered list. Validate on load. Ship about 15 placeholder contracts using abstract items, enough to test the loop. Paul replaces them later (D4).
+5. **Order Dock.** A fixed 2x2 building that accepts only the current contract's item (D9). The dock panel always shows the current contract (large icon from task 3), progress, and credits on offer. When filled: short celebration, credits paid, next contract appears. No menu in between.
+6. **Plot expansion (D1).** Contracts marked `milestone` grow the plot. The camera eases out over about 2 seconds to show the new area and its new hoppers. Hoppers are fixed (D2) and placed by the expansion data.
+7. **Storage depots (D2, D9).** Small, medium and large depots (for example 50, 200, 1000 parts, one item type each). Parts go in from any input port and come out of the output port when there is room, so a full depot works like a hopper placed wherever you need it. The panel shows contents and fill level.
+8. **Zoomed-out play.** Draw only visible tiles. Below a zoom threshold, draw belts as lines and items as dots of their color. Must hold 50 fps at the largest plot size with 1000 items.
+9. **One save (D7).** Save v3: plot size, machines, belts, items in transit, depot contents, contract index, credits, unlocks. Export and import stay. Main menu: Continue, New game, Settings, Sandbox. Delete the level select and `levels/*.json` (D4).
 
-Automatic checks: every contract with steps can be completed by a scripted player that follows only the highlights.
-Human gate: a student who has never seen the game reaches contract 6 in 10 minutes without adult help.
+Automatic checks: a headless run of all placeholder contracts using reference layouts in `test/fixtures/`; save, reload and continue gives the same state; depot conservation (parts in = parts stored + parts out); every item id in contracts can be made from raw materials with the machines unlocked by then; frame time check at the largest plot.
+Human gate: Paul plays from a new game through the first expansion without opening a menu, and wants to see the next contract.
 
-### Phase 4: Scale and economy (M)
+**Fun checkpoint.** After Phase 2, Paul and one or two students play for 20 minutes. If it is not fun yet, fix that before adding systems. Write what was learned in `STATUS.md`.
 
-Goal: the reason to keep building. Bigger numbers, faster lines, real choices.
+### Phase 3: Power and rewards (M)
+
+Goal: a second thing to manage and a reason to look forward to level-ups.
+
+**Design first.** The details are being worked out in `docs/power-and-rewards.md`. The local model does not start this phase until Paul marks that document "ready to build".
+
+Likely tasks (to be confirmed by the design doc): power budget and generators, the credits shop, level-ups with a perk choice of 1 of 3, the perk list as data, power and perk tests.
+
+### Phase 4: Scale (M)
+
+Goal: bigger numbers, faster lines, real choices.
 
 Read first: shapez `hud/parts/shop.js`, `hud/parts/statistics.js`, `production_analytics.js`.
 
 Tasks:
-1. **Upgrades** paid in delivered parts or credits (per D3): Conveyor Mk2 and Mk3 (2, 4, 8 parts per second), Intake Mk2 and Mk3, machine speed tiers, bigger bins. Upgrades apply to the whole factory, like shapez.
-2. **Standing orders.** From Journeyman on, some contracts ask for a rate ("6 boards per minute for 3 minutes"). The terminal shows a live rate meter.
-3. **Market tile.** Buys any finished product for credits, forever. Gives old lines a purpose.
-4. **Perks** (per D6): at the end of each tier, choose 1 of 3. Examples: "Saws make 3 wafers from 1 ingot", "Bins hold 30", "Intakes on copper run 50% faster". Each one is a small data-driven modifier.
-5. **One-use boosts** bought with credits: "Overdrive: all machines 2x for 60 seconds".
-6. **Stats panel:** items per minute made and delivered for each item, last 5 minutes.
-7. **Machine card shows rates:** "Saw: 30 ingots in per minute, 60 wafers out per minute". This is where ratios get taught without a lesson.
+1. **Upgrades** bought with credits (D3): Conveyor Mk2 and Mk3 (2, 4, 8 parts per second), machine speed tiers, hopper rate tiers, bigger depots.
+2. **Standing orders.** Some contracts ask for a rate ("6 per minute for 3 minutes"). The dock shows a live rate meter.
+3. **One-use boosts** bought with credits: "Overdrive: all machines 2x for 60 seconds".
+4. **Stats panel:** items per minute made and delivered for each item, last 5 minutes.
+5. **Machine card shows rates:** "Cutter: 30 in per minute, 60 out per minute". This is where ratios get taught without a lesson.
 
-Automatic checks: modifier tests (each perk and upgrade changes exactly what it says), rate meter accuracy against a known layout, economy simulation that checks a player can afford the first upgrade within 2 contracts of it appearing.
+Automatic checks: each upgrade changes exactly what it says; rate meter accuracy against a known layout; economy simulation shows the first upgrade is affordable within 2 contracts of appearing.
 Human gate: Paul upgrades belts and feels the factory speed up. A standing order makes him rebuild a line for more throughput.
 
-### Phase 5: Content: the product tree and four tiers (L)
+### Phase 5: Content (Paul writes, the model builds) (L)
 
-Goal: enough to play for many hours, built from data only.
-
-Tasks:
-1. **Recipes as data** in `game/data/recipes.json`: `{ machine, inputs: [...], outputs: [...], time }`. Remove the hard-coded handlers for each item. A 2-input station accepts a part only if some recipe it knows could still be finished with it.
-2. Add the items and machines from section 7 (after Paul's edits, D5).
-3. Write all contracts for Novice, Journeyman, Engineer, Plant Manager (about 40 total). Amounts grow like shapez: tens early, hundreds late.
-4. A **reference solution** for every contract in `test/fixtures/`, run headless in CI.
-5. Sandbox mode: everything unlocked, infinite plot, no contracts.
-
-Automatic checks: every contract solvable by its reference layout; every item reachable from raw materials with the machines unlocked by then; no recipe produces an item nothing uses (except final products).
-Human gate: Paul plays from Novice to the middle of Engineer across two or three sessions and still wants to continue.
-
-### Phase 6: Art, audio and UI polish (M)
-
-Goal: looks and sounds like a finished game. Paul has control over the look.
+Goal: the real game. Paul writes the product tree, names, story and contract sequence (D4, D5). The model turns it into data and proves every contract can be done.
 
 Tasks:
-1. **Art kit** (section 6): all colors, shapes and line weights in `game/src/art/style.js`. Every item and machine drawn from it.
-2. **PNG override** hook: if `public/sprites/<id>.png` exists, draw it instead of the vector version.
-3. **HUD redesign:** contract panel (top left), toolbar with machine icons and key labels (bottom center, shapez style), credits and storage (top right), pause and speed (top right). No text-only buttons in the playfield.
-4. **Animations:** parts slide into machines and pop out, terminal accepts with a small bounce, contract complete celebration, unlock card.
-5. **Audio:** Web Audio placeholders for every event, played through one `sound.js` with a manifest. Deliver `AUDIO.md` listing every sound, when it plays, its suggested length, and the file name Paul should use (for example `belt_place.ogg`, `contract_complete.ogg`). Dropping files into `public/audio/` replaces the placeholders.
-6. Light and dark themes from the style file. Colorblind mode checked with a simulator.
+1. Paul delivers the product tree and sequence (any format: a table or list is fine).
+2. The model fills `data/items.json` (names and art notes), `data/recipes.json`, `data/contracts.json`, and the expansion and hopper layout.
+3. A reference solution for every contract in `test/fixtures/`, run headless.
+4. Item art for every named product (the generated icons from Phase 2 are the fallback).
 
-Automatic checks: every item and machine id has a drawing; no PNG is required to run; bundle under 250 KB JS without optional PNGs.
+Automatic checks: every contract solvable by its reference layout; every item reachable; no recipe makes an item nothing uses (except final products).
+Human gate: Paul plays from the start to the middle of the game across two or three sessions and still wants to continue.
+
+### Phase 6: Onboarding inside the contracts (M)
+
+Goal: a grade 7 student learns by playing, with almost no reading. This comes after Phase 5 because the guidance is written into Paul's contracts.
+
+Read first: shapez `hud/parts/interactive_tutorial.js`, `hud/parts/tutorial_hints.js`.
+
+Tasks:
+1. Early contracts carry **guided steps** in their data: `steps: [{ when, show, highlight }]`. Example: "Drag a conveyor from the hopper to the dock" with pulsing arrows. Each step disappears when done.
+2. Steps appear only for the first contract that teaches each idea.
+3. **Jam help** (the H key, plus a button after 20 seconds with no progress): highlights the stuck machine and traces upstream to the cause in plain words.
+4. **Recipe view** on the dock: the target product as a tree of icons with the machine for each step.
+5. Every line of text checked: grade 7, short sentences, no em dashes (automated test on all data files).
+
+Automatic checks: a scripted player that follows only the highlights completes every guided contract.
+Human gate: a student who has never seen the game finishes the first five contracts in 10 minutes without adult help.
+
+### Phase 7: Art, audio and UI polish (M)
+
+Tasks:
+1. **Art kit:** all colors, shapes and line weights in `game/src/art/style.js`. Every item and machine drawn from it.
+2. **HUD redesign:** contract panel (top left), toolbar with machine icons and key labels (bottom center), credits and power (top right), pause and speed. No text-only buttons in the playfield.
+3. **Animations:** parts slide into machines and pop out, the dock accepts with a small bounce, contract and level-up celebrations, expansion reveal.
+4. **Audio:** Web Audio placeholders for every event through one `sound.js` with a manifest. Deliver `AUDIO.md` listing every sound, when it plays, suggested length, and the file name Paul should use (for example `belt_place.ogg`). Dropping files into `public/audio/` replaces the placeholders.
+5. Light and dark themes from the style file. Colorblind mode checked with a simulator.
+
+Automatic checks: every item and machine id has a drawing; bundle under 250 KB JS.
 Human gate: Paul shows it to someone who has not seen it, and they think it is a real game.
 
-### Phase 7: Pilot and release (M)
+### Phase 8: Pilot and release (M)
 
-Tasks: performance on a low-spec Chromebook (50 fps with the largest plot), keyboard play, motion setting, save export and import across machines, teacher notes (`docs/TEACHER.md`: how to start, how a 30-minute class session maps to tiers), class playtest, fixes from it, deploy to edu/tools with no external requests.
+Tasks: performance on a low-spec Chromebook (50 fps at the largest plot), keyboard play, motion setting, save export and import across machines, teacher notes (`docs/TEACHER.md`), class playtest, fixes from it, link from edu/tools with no external requests.
 
 Human gate: one class plays for 30 minutes, no data loss, students ask to keep playing.
 
 ### Later (after release, not before)
 
-Logic tier (sensors, relays, gates), Challenges (bounded puzzle levels, rush orders), blueprints (copy and paste areas, a late unlock reward), teacher level editor, shareable factories.
+Challenge modes and achievements (D7), logic tier (sensors, relays, gates), blueprints (copy and paste areas), teacher level editor, shareable factories.
 
 ---
 
@@ -210,40 +216,32 @@ Logic tier (sensors, relays, gates), Challenges (bounded puzzle levels, rush ord
 
 | Now | After |
 |---|---|
-| `levels/*.json` + level select | `data/contracts.json` + auto-advance; old levels kept as `data/challenges/` for later |
-| `HANDLERS` with hard-coded recipes | `data/recipes.json` + a generic station handler |
-| Fixed hoppers | Supply nodes + Intake machine |
-| Single-tile dock with exact target | 2x2 Order Terminal + storage |
-| `_rebuildFlowLines()` on every edit | Flow state carried through line split and merge |
+| `levels/*.json` + level select | `data/contracts.json` + auto-advance, one save |
+| `HANDLERS` with hard-coded recipes | Operations + `data/recipes.json` + `data/items.json` name layer |
+| Hand-drawn icons per item | Icons generated from the recipe tree, two levels of detail |
+| Single-tile dock with exact target | 2x2 Order Dock, current contract only |
+| Bin (10 parts) | Storage depots, three sizes, act as sources |
+| Fixed zone per level | One plot that expands at milestones |
 | Inputs from any side | Port definitions per machine |
-| `art.js` + renderer drawing inline | `art/style.js` + `art/items.js` + `art/machines.js`, PNG override |
-| Save v2 per level | Save v3 per factory slot |
+| Save v2 per level | Save v3, one factory |
 
 ---
 
 ## 6. Art direction and control
 
-Vector art stays, if it is good. The PNG idea was about control, so the plan gives control without PNGs:
+Vector art stays (D8). Control comes from data, not PNGs:
 
-- **One style file** (`art/style.js`): palette tokens, outline width, corner radius, shadow, the shape and pattern for every material. Change a value, every sprite follows.
-- **Fixed sizes:** a tile is 64 logical px. Items draw in a 28 px box centered on the belt. Machines fill the tile with a 4 px inset. Ports are 10 px arrows on the edge. PNG overrides are 2x (128 px per tile, 56 px per item) with a transparent background.
-- **Recognition rule:** every material has one silhouette, one color and one pattern. Every processed form keeps its material's color and changes shape (ingot to wafer to die gets flatter and smaller).
-- **Review sheet:** a `?art=1` page that draws every item and machine at 1x and 2x, in both themes and in colorblind mode, so Paul can review the whole set at once.
+- **One style file** (`art/style.js`): palette tokens, outline width, corner radius, shadow, the color for every material and the shape for every form. Change a value, every sprite follows.
+- **Fixed sizes:** a tile is 64 logical px. Items draw in a 28 px box on the belt. Order panel icons are 96 px. Machines fill the tile with a 4 px inset. Ports are 10 px arrows on the edge.
+- **Two levels of detail (D8):** at belt size an item shows its outer silhouette and main color, enough to tell it apart from neighbors. At order size the whole tree is visible (the parts inside the assembly).
+- **Recognition rule:** every material has one color and one pattern. Every processed form keeps its material's color and changes shape.
+- **Review sheet:** `?art=1` draws every item and machine at both sizes, in both themes and in colorblind mode.
 
 ---
 
-## 7. Product tree (draft for Paul to edit)
+## 7. Product tree
 
-Raw (from supply nodes): silicon ingot, copper wire, battery cell, housing, plastic pellet (Engineer), glass pane (Plant Manager).
-
-| Tier | New items | New machines | Example finished products |
-|---|---|---|---|
-| Novice | wafer, die, coil | Intake, Conveyor, Saw, Coil press, Merger | dies, coils |
-| Journeyman | circuit board, module, device | Solder station, Assembler, Encapsulation, Splitter, Bin | device |
-| Engineer | plastic sheet, LED, motor, light bar | Molder, Overhead conveyor, Recycler | flashlight (housing + battery + LED), fan (housing + motor + board) |
-| Plant Manager | display, controller, robot arm | Fabricator (3 inputs) | tablet (display + module + housing), robot kit (controller + 2 motors + housing) |
-
-The robot kit gives a direct link to the grade 7 LEGO engineers unit. Shared parts (boards, motors, LEDs) are reused across products, so a well-built board line feeds several later products. That reuse is what makes scaling interesting.
+Paul writes this (D5). Until then the game uses abstract materials `m1` to `m4` and the operations in Phase 2 task 1. The earlier draft (silicon, copper, boards, robot kit) is kept only as an example of the shape the tree should have: shared intermediate parts used by several products, so a well-built line feeds more than one product.
 
 ---
 
@@ -254,6 +252,7 @@ The robot kit gives a direct link to the grade 7 LEGO engineers unit. Shared par
 - No external fonts, scripts or CDNs (must work in China).
 - No em dashes in any text the player sees.
 - Do not start Phase N+1 work while Phase N's automatic checks fail.
+- Do not start Phase 3 until `docs/power-and-rewards.md` is marked "ready to build" by Paul.
 
 ---
 
@@ -264,7 +263,7 @@ The robot kit gives a direct link to the grade 7 LEGO engineers unit. Shared par
 3. For features: write the automatic check named in the phase, then build until it passes. Run `npm test` and `npm run build` before ending.
 4. Update `STATUS.md` at the end of every session: what changed, which tests were added, what is next, anything that went wrong.
 5. **Never tick a human gate.** Write "ready for human gate" and stop. Only Paul marks gates passed.
-6. If a task needs a design decision that is not in this file or `concepts.md`, stop and add it to the "Questions for Paul" list in `STATUS.md`. Do not guess.
+6. If a task needs a design decision that is not in this file, `concepts.md` or a design doc in `docs/`, stop and add it to the "Questions for Paul" list in `STATUS.md`. Do not guess.
 7. Keep files under about 500 lines. Split by system when they grow.
 8. Read the shapez files named in each phase for ideas. Do not copy code from them.
 

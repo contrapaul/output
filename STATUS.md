@@ -1,30 +1,28 @@
 # Status
-Current phase: 0 (Repair and re-baseline)
-Current task: 0.1-0.5 complete - ready for human gate
+Current phase: 1 (Building feels good)
+Current task: 1.1 (drag to place belts), not started
 
-## Automatic checks
-- [x] All tests pass, including the conservation test: items in world = emitted + injected - delivered - recycled, checked after 150 s of a seeded random edit script on the sandbox (test/phase0.test.js, passing)
+Read `roadmap.md` (v3, updated 2026-10-21) before starting. Paul answered decisions D1 to D9; section 3 lists what they change. Phase 1 itself did not change.
 
-## Human gate
-- [ ] Paul builds a line, edits it while parts are moving, and nothing vanishes. (only Paul ticks this)
+## Automatic checks (Phase 1)
+- [ ] Drag path builder tests: straight, one corner, back-tracking, through blocked tiles
+- [ ] Ports accept and reject by side
+- [ ] Undo/redo round trips, including drags and area deletes as one step
+- [ ] Rotating a machine in place keeps its parts
+- [ ] Frame time under 8 ms with 300 items on screen (`?perf=1` overlay)
+
+## Human gate (Phase 1)
+- [ ] Paul draws a 20-tile belt with two corners in one drag, rebuilds a broken line in under 30 seconds, and says it "feels right". (only Paul ticks this)
+
+## Phase 0 (done)
+- [x] Automatic checks: 86 tests passing, including 150 s random-edit conservation test (test/phase0.test.js)
+- [x] Human gate: Paul tested on 2026-10-21, "it works but of course is extremely barebones."
+- Recorded decision: a part on a removed belt tile is removed from the world (counted in `GameRoot.partsRemoved`, `partRemoved` signal fires for a future puff effect).
+- Known behavior: a bin with no downstream keeps one part in its output slot. Bins are replaced by storage depots in Phase 2.
 
 ## Last session
-- changed:
-  - Belt edits no longer wipe items in transit. Placing, removing, and rotating (remove + place) now keep items on every surviving tile: items are snapshotted before the edit and re-homed to the line that still owns their tile (game/src/game/root.js, `_snapshotItemTiles` / `_resyncFlowLines`).
-  - Design decision (roadmap allowed either, so it is documented here): a part sitting on a removed belt tile is REMOVED from the world, not stored (there is no stock system yet). It is counted in `GameRoot.partsRemoved` and a `partRemoved` signal fires, ready for a puff effect.
-  - Splitter no longer duplicates: one part in, one part out. It sends to one of two exits, alternating when both have room (`MachineInstance.outCursor`, `handler.outDirs` in game/src/game/systems/process.js).
-  - Credits fixed: the `coinsEarnedHere` typo is gone and the `contractComplete` payload reports a real earned number (10 ingots = 50 credits, verified by test).
-  - Hidden bug found while adding the ledger: `recycled` was never incremented anywhere. Recycler now counts through `handler.sink`.
-  - GameRoot now keeps a ledger: emitted / delivered / recycled / partsRemoved.
-  - Level hints u5 and u8 reworded to the new splitter behavior (grade 7, no em dashes).
-  - Status consolidated: `game/MILESTONES.md` deleted, status section removed from `game/README.md`, this file created.
-- tests added:
-  - test/phase0.test.js (10 tests): tail extension, head extension, mid-line split, tail removal, mid-line rotation (no item lost); splitter alternation; splitter blocked-exit fall-through; splitter 1-in/1-out with no duplication; credits are a real number; 150 s seeded random edit script with conservation checked every 100 ticks (mulberry32 seed 20261015, reproducible).
-  - Full suite: 86 passing. `npm run build` clean (66.35 kB JS, 20.72 kB gzip).
-- problems:
-  - Two new tests first failed because they asserted on bin buffer only. A bin with no downstream keeps one part in its output slot (pre-existing M3 behavior, not a Phase 0 concern). Tests now count buffer + output slot.
-  - Nothing else went wrong.
+- 2026-10-21 (Claude, planning only, no game code changed): roadmap v3 written from Paul's decisions; Cloudflare deploy fixed (`wrangler.jsonc`); this file reset for Phase 1.
 
 ## Questions for Paul
-- None for Phase 0.
-- Roadmap decisions D1, D2, D4, D7, D9 are due before Phase 2 (you said you would update the roadmap after Phase 1).
+- Q1 and Q2 in roadmap section 3 (needed before Phases 2 and 3, not Phase 1).
+- Power and rewards design in `docs/power-and-rewards.md` (needed before Phase 3).
