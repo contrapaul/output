@@ -1,6 +1,7 @@
-# Output — Factory Puzzle Game
+# Output: factory game
 
-Electronic-parts factory puzzle game for the edu/tools page.
+A factory game for the edu/tools page: one factory that keeps growing, with
+contracts that arrive on their own.
 
 ## Status
 
@@ -11,23 +12,31 @@ See `../STATUS.md` (phase status) and `../roadmap.md` (the plan).
 ```bash
 npm install
 npm run dev        # dev server at http://localhost:5173
-npm test           # 25 headless tests
+npm test           # headless tests (node --test)
 npm run build      # production build to dist/
 ```
 
-## Play
+## Pages
 
-| Level | URL | Goal | New machines |
-|---|---|---|---|
-| Tutorial A | `/?level=t-a` | Move 10 ingots | belt |
-| Tutorial B | `/?level=t-b` | Cut 10 wafers | saw |
-| Tutorial C | `/?level=t-c` | Build 10 boards | press, solder |
-| Unit 1 | `/?level=u1` | 8x dies | (reuse) |
-| Unit 2 | `/?level=u2` | 10x boards | merger |
-| Unit 3 | `/?level=u3` | 8x modules | mounter, bin |
-| Unit 4 | `/?level=u4` | 6x devices | encap |
+| URL | What |
+|---|---|
+| `/` | Continue the saved factory, or the menu (New game, Sandbox, Settings, Export, Import) |
+| `/?sandbox` | Sandbox: largest plot, every hopper and tool, no orders, not saved |
+| `/?art=1` | Art sheet: every part form and every contract item at belt and order size (`&cb=1` colorblind, `&theme=dark`) |
+| `/?perf=1` | Frame-time overlay |
 
-Open `http://localhost:5173/` for the level select screen.
+## Content (edit without code)
+
+| File | What |
+|---|---|
+| `data/contracts.json` | Contracts in order: item, amount, credits per part, unlocks, milestone |
+| `data/plot.json` | Plot stages (zone, new hoppers) and the dock position |
+| `data/operations.json` | Operation machines (cut, press, combine, encase), times, depth limit, shell materials |
+| `data/items.json` | Material colors and patterns, real names for item ids |
+
+Item ids are recipe trees: `m1`, `cut(m1)`, `press(cut(m2))`, `join(a|b)`
+(sorted), `case(assembly|shell)`. A part can be cut up to three times, and
+pressing is its last step. A combiner takes one part from each side.
 
 ## Controls
 
@@ -56,53 +65,40 @@ Add `?perf=1` to the URL for a frame-time overlay.
 ## Architecture
 
 ```
+data/                  # content (JSON), see above
 src/
-  main.js              # bootstrap, level loading, contract overlay
-  core/
-    loop.js            # fixed-timestep scheduler (30 Hz)
-    signals.js         # event emitter
-    grid.js            # tile math, directions
-    config.js          # rates, colors, theme
+  main.js              # app shell: menu, campaign or sandbox, HUD, toasts
+  data/index.js        # the one place that imports data/*.json
+  core/                # loop (30 Hz), signals, grid math, config/theme
   game/
-    world.js           # placed machines map
+    campaign.js        # contract queue, unlocks, plot stages
+    root.js            # GameRoot: tick, hoppers, machines, dock, ledger
+    world.js           # placed pieces by tile and layer, placement rules
     line.js            # belt lines (incremental place/remove/split/splice)
-    camera.js          # pan/zoom
-    renderer.js        # canvas: grid, belts, machines, items, hoppers, dock
+    items.js           # item ids, part rules, labels, recipe steps
+    art.js             # item icons from the recipe tree (+ cached stamps)
+    renderer.js        # canvas drawing, culling, far-zoom drawing
+    camera.js          # pan/zoom, fit, ease to a new zone
     input.js           # mouse + keyboard (drag build, area delete, pipette)
     dragpath.js        # drag path builder (corners, back-tracking)
     build.js           # plan/apply multi-tile placement, area delete
     history.js         # undo/redo stack
-    art.js             # vector item icons
-    items.js           # item registry + canonical encoding
-    root.js            # GameRoot: tick orchestrator
+    save.js            # save v3 (one factory, parts in transit), migrations
     systems/
       flow.js          # belt item advancement (spacing, backpressure)
-      process.js       # machine handler table + charge timers
-      dock.js          # order dock (accept/reject/progress)
+      process.js       # machine handlers (from operations.json), ports
+      dock.js          # 2x2 order dock with slots
   ui/
-    toolbar.js         # machine palette
-test/
-  lines.test.js        # 11 tests: line resolution
-  flow.test.js         # 14 tests: flow, dock, saw, conservation
-levels/
-  t-a.json             # Tutorial A
-  t-b.json             # Tutorial B
+    toolbar.js         # tool palette
+    artsheet.js        # ?art=1 page
+test/                  # node --test: lines, flow, phase0, phase1, phase2
 ```
 
 ## Key invariants (tested)
 
 1. **Spacing:** items on a belt never closer than 0.63 tiles
-2. **Backpressure:** blocked tail clamps the entire line, no items lost
-3. **Conservation:** items in world = emitted − accepted (no creation/destruction)
+2. **Backpressure:** a blocked tail clamps the whole line, nothing is lost
+3. **Ledger:** parts in world = emitted + injected + made - merged - delivered - recycled - removed (`GameRoot.ledgerOk()`)
 4. **Determinism:** fixed 30 Hz tick, stable iteration order, no randomness
 5. **Line integrity:** every belt in exactly one line, chains are simple
-6. **Order-insensitive assembly:** solder/mounter/encap accept inputs in any order
-
-## Test coverage
-
-| File | Tests | Covers |
-|---|---|---|
-| `test/lines.test.js` | 11 | line place/remove/split/splice, invariants |
-| `test/flow.test.js` | 14 | flow, spacing, backpressure, dock, saw, conservation |
-| `test/machines.test.js` | 16 | press, solder, mounter, encap, merger, bin, full chain, save |
-| **Total** | **41** | |
+6. **Ports:** parts enter only through input sides and leave through output sides

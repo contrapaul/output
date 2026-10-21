@@ -1,14 +1,15 @@
 // Canvas renderer.
-// Grid, ground + overhead belts, machines (with ports and state), hoppers,
-// dock, items on polyline lines, jam highlight, ghost path preview, delete
-// box, wrong-side markers, selection.
 //
-// Phase 1:
-//   - items are drawn between ticks (render alpha) for smooth motion
-//   - machine state at a glance: working = gentle pulse, waiting = dim,
-//     blocked = amber dashed outline (shape cue, not color only)
-//   - ports: input notches and output arrows on each machine edge
-//   - the ghost is a whole planned path (build.js plan), invalid tiles red
+// Draw order: land (the plot, darker outside it), grid, ground belts,
+// machines, hoppers, dock, items, overhead belts and their items, markers,
+// selection, ghost path, delete box.
+//
+// Phase 1: smooth motion (render alpha), machine states (working pulse,
+// waiting dim, blocked amber dashed outline), ports, ghost path plans.
+// Phase 2: the plot has an origin and grows; only visible tiles are drawn;
+// when zoomed far out belts become plain strips and items become colored
+// dots; new machines (cutter, press, combiner, encaser, depots); 2x2 dock;
+// items drawn from their recipe tree (art.js).
 //
 // Settings honored (from game.settings):
 //   motion      false -> no pulsing, item positions snap to half tiles
@@ -16,8 +17,23 @@
 
 import { CONFIG, themeColors } from "../core/config.js";
 import { DIRS } from "../core/grid.js";
-import { drawItem } from "./art.js";
+import { drawItem, drawItemCached, itemColor } from "./art.js";
 import { MACHINE_NAMES, PORTS } from "./systems/process.js";
+
+const FAR = 22; // screen px per tile below which the simple drawing is used
+
+const MACHINE_COLORS = {
+  cutter: ["#8a8a9a", "#c79a48"],
+  press: ["#a08050", "#c89040"],
+  combiner: ["#506070", "#6090c0"],
+  encaser: ["#807040", "#c0a050"],
+  merger: ["#607060", "#80a080"],
+  splitter: ["#70607a", "#a080c0"],
+  recycler: ["#4a6a62", "#50a090"],
+  depot_s: ["#6f6a60", "#8a8478"],
+  depot_m: ["#6f6a60", "#8a8478"],
+  depot_l: ["#6f6a60", "#8a8478"],
+};
 
 export class Renderer {
   constructor(canvas, camera, game) {
@@ -37,7 +53,7 @@ export class Renderer {
   }
 
   get world() {
-    return this.game.world || this.game;
+    return this.game.world;
   }
 
   get settings() {
@@ -46,10 +62,8 @@ export class Renderer {
 
   _resize() {
     const dpr = window.devicePixelRatio || 1;
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
+    this.canvas.width = Math.round(this.canvas.clientWidth * dpr);
+    this.canvas.height = Math.round(this.canvas.clientHeight * dpr);
     this.dpr = dpr;
   }
 
@@ -67,28 +81,35 @@ export class Renderer {
     this.selected = key;
   }
 
+  _visible(x, y) {
+    const v = this.view;
+    return x >= v.x0 && x <= v.x1 && y >= v.y0 && y <= v.y1;
+  }
+
   render(alpha = 1) {
     this.alpha = alpha;
     const ctx = this.ctx;
     const cam = this.camera;
     const colors = themeColors(this.theme);
     const tile = CONFIG.TILE;
-    const zone = this.world.zone;
-
+    this.view = cam.visibleTiles();
+    this.far = tile * cam.zoom < FAR;
+    this.scale = cam.zoom * this.dpr;
     this._t += 1;
 
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+    ctx.fillStyle = colors.outside;
+    ctx.fillRect(0, 0, w, h);
 
     ctx.save();
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.zoom, cam.zoom);
 
-    this._drawGrid(ctx, colors, zone, tile);
+    this._drawLand(ctx, colors, tile);
     this._drawBelts(ctx, colors, tile, 0);
-    this._drawMachines(ctx, colors, tile);
+    this._drawMachines(ctx, tile);
     this._drawHoppers(ctx, tile);
     this._drawDock(ctx, tile);
     this._drawItems(ctx, tile, 0);
@@ -96,7 +117,6 @@ export class Renderer {
     this._drawItems(ctx, tile, 1);
     this._drawWrongSides(ctx, tile);
     this._drawJam(ctx, tile);
-
     if (this.selected) this._drawSelection(ctx, colors, tile);
     if (this.ghostPlan) this._drawGhostPlan(ctx, colors, tile);
     if (this.area) this._drawArea(ctx, tile);
@@ -104,72 +124,31 @@ export class Renderer {
     ctx.restore();
   }
 
-  _drawGrid(ctx, colors, zone, tile) {
+  _drawLand(ctx, colors, tile) {
+    const z = this.world.zone;
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(z.x * tile, z.y * tile, z.w * tile, z.h * tile);
+    if (this.far) return; // no grid lines when zoomed far out
+    const v = this.view;
+    const x0 = Math.max(z.x, v.x0);
+    const x1 = Math.min(z.x + z.w, v.x1);
+    const y0 = Math.max(z.y, v.y0);
+    const y1 = Math.min(z.y + z.h, v.y1);
     ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1 / this.camera.zoom;
     ctx.beginPath();
-    for (let x = 0; x <= zone.w; x++) {
-      ctx.moveTo(x * tile, 0);
-      ctx.lineTo(x * tile, zone.h * tile);
+    for (let x = x0; x <= x1; x++) {
+      ctx.moveTo(x * tile, y0 * tile);
+      ctx.lineTo(x * tile, y1 * tile);
     }
-    for (let y = 0; y <= zone.h; y++) {
-      ctx.moveTo(0, y * tile);
-      ctx.lineTo(zone.w * tile, y * tile);
+    for (let y = y0; y <= y1; y++) {
+      ctx.moveTo(x0 * tile, y * tile);
+      ctx.lineTo(x1 * tile, y * tile);
     }
     ctx.stroke();
-  }
-
-  _drawBelts(ctx, colors, tile, z) {
-    for (const m of this.world.machines.values()) {
-      if (z === 0 ? m.t !== "belt" : m.t !== "belt_high") continue;
-      const px = m.x * tile;
-      const py = m.y * tile;
-      if (z === 1) {
-        // overhead: raised look, distinct hue
-        ctx.fillStyle = this.theme === "dark" ? "#3d4a63" : "#9db4d8";
-        ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
-        ctx.strokeStyle = this.theme === "dark" ? "#7d97c4" : "#5f7ea8";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(px + 2, py + 2, tile - 4, tile - 4);
-      } else {
-        ctx.fillStyle = colors.belt;
-        ctx.fillRect(px, py, tile, tile);
-        ctx.strokeStyle = colors.beltLine;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(px + 0.5, py + 0.5, tile - 1, tile - 1);
-      }
-      // direction chevron
-      const cx = px + tile / 2;
-      const cy = py + tile / 2;
-      const s = tile * 0.18;
-      const dir = DIRS[m.r];
-      ctx.strokeStyle = z === 1 ? "#ffffff" : colors.beltLine;
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = "round";
-      const tipX = cx + dir.dx * s;
-      const tipY = cy + dir.dy * s;
-      const backX = cx - dir.dx * s * 0.9;
-      const backY = cy - dir.dy * s * 0.9;
-      const perpX = -dir.dy * s * 0.8;
-      const perpY = dir.dx * s * 0.8;
-      ctx.beginPath();
-      ctx.moveTo(backX + perpX, backY + perpY);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(backX - perpX, backY - perpY);
-      ctx.stroke();
-    }
-  }
-
-  _machineBase(ctx, px, py, tile, color) {
-    const bx = px + tile * 0.1;
-    const by = py + tile * 0.1;
-    const size = tile * 0.8;
-    ctx.fillStyle = color;
-    ctx.fillRect(bx, by, size, size);
-    ctx.strokeStyle = "rgba(0,0,0,0.3)";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(bx, by, size, size);
-    return { cx: px + tile / 2, cy: py + tile / 2 };
+    ctx.strokeStyle = colors.edge;
+    ctx.lineWidth = 2 / this.camera.zoom;
+    ctx.strokeRect(z.x * tile, z.y * tile, z.w * tile, z.h * tile);
   }
 
   _chevron(ctx, cx, cy, r, s, color, width) {
@@ -186,6 +165,31 @@ export class Renderer {
     ctx.lineTo(cx + dir.dx * s, cy + dir.dy * s);
     ctx.lineTo(backX - perpX, backY - perpY);
     ctx.stroke();
+  }
+
+  _drawBelts(ctx, colors, tile, z) {
+    const type = z === 0 ? "belt" : "belt_high";
+    for (const m of this.world.machines.values()) {
+      if (m.t !== type || !this._visible(m.x, m.y)) continue;
+      const px = m.x * tile;
+      const py = m.y * tile;
+      if (z === 1) {
+        ctx.fillStyle = this.theme === "dark" ? "#3d4a63" : "#9db4d8";
+        ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
+        if (this.far) continue;
+        ctx.strokeStyle = this.theme === "dark" ? "#7d97c4" : "#5f7ea8";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + 2, py + 2, tile - 4, tile - 4);
+      } else {
+        ctx.fillStyle = colors.belt;
+        ctx.fillRect(px, py, tile, tile);
+        if (this.far) continue;
+        ctx.strokeStyle = colors.beltLine;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(px + 0.5, py + 0.5, tile - 1, tile - 1);
+      }
+      this._chevron(ctx, px + tile / 2, py + tile / 2, m.r, tile * 0.18, z === 1 ? "#ffffff" : colors.beltLine, 2.5);
+    }
   }
 
   /**
@@ -221,106 +225,36 @@ export class Renderer {
     for (const side of ports.out) tri(side, true, "#ffffff");
   }
 
-  _drawMachines(ctx, colors, tile) {
-    const machines = this.game.machines;
-    if (!machines) return;
-    for (const m of machines.values()) {
+  _drawMachines(ctx, tile) {
+    for (const m of this.game.machines.values()) {
+      if (!this._visible(m.x, m.y)) continue;
       const px = m.x * tile;
       const py = m.y * tile;
-      const state = this.game.machineState ? this.game.machineState(m) : "waiting";
+      const [idle, busyColor] = MACHINE_COLORS[m.type] || ["#888", "#999"];
+      const state = this.game.machineState(m);
       const busy = state === "working";
+      if (this.far) {
+        ctx.fillStyle = state === "blocked" ? "#e0a030" : busy ? busyColor : idle;
+        ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
+        continue;
+      }
       ctx.save();
       if (state === "waiting") ctx.globalAlpha = 0.6;
       if (busy && this.settings.motion) {
-        // gentle pulse: the machine breathes while it works
         const k = 1 + 0.035 * Math.sin(this._t * 0.25 + m.x + m.y);
         ctx.translate(px + tile / 2, py + tile / 2);
         ctx.scale(k, k);
         ctx.translate(-(px + tile / 2), -(py + tile / 2));
       }
-      const { cx, cy } = this._machineBase(
-        ctx, px, py, tile,
-        m.type === "saw" ? (busy ? "#d4a04a" : "#8a8a9a") :
-        m.type === "press" ? (busy ? "#c89040" : "#a08050") :
-        m.type === "solder" ? (busy ? "#d08040" : "#906050") :
-        m.type === "mounter" ? (busy ? "#6090c0" : "#506070") :
-        m.type === "encap" ? (busy ? "#c0a050" : "#807040") :
-        m.type === "merger" ? (busy ? "#80a080" : "#607060") :
-        m.type === "splitter" ? (busy ? "#a080c0" : "#70607a") :
-        m.type === "bin" ? (busy ? "#9090a0" : "#707080") :
-        m.type === "recycler" ? (busy ? "#50a090" : "#4a6a62") :
-        "#888"
-      );
-
-      const stroke = (pts) => {
-        ctx.strokeStyle = "#ddd";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-        ctx.stroke();
-      };
-
-      switch (m.type) {
-        case "saw":
-          ctx.fillStyle = "#c0c0c8";
-          ctx.beginPath();
-          ctx.arc(cx, cy, tile * 0.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "rgba(0,0,0,0.3)";
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          break;
-        case "press":
-          ctx.fillStyle = "#888";
-          ctx.fillRect(cx - tile * 0.08, py + tile * 0.15, tile * 0.16, tile * 0.3);
-          ctx.fillRect(cx - tile * 0.2, py + tile * 0.45, tile * 0.4, tile * 0.12);
-          break;
-        case "solder":
-          stroke([[cx - tile * 0.1, cy + tile * 0.15], [cx + tile * 0.1, cy - tile * 0.1]]);
-          ctx.fillStyle = "rgba(255,255,255,0.2)";
-          ctx.fillRect(px + tile * 0.15, py + tile * 0.6, tile * 0.25, tile * 0.2);
-          ctx.fillRect(px + tile * 0.6, py + tile * 0.6, tile * 0.25, tile * 0.2);
-          break;
-        case "mounter":
-          stroke([[cx, py + tile * 0.2], [cx, cy], [cx + tile * 0.15, cy]]);
-          break;
-        case "encap":
-          ctx.strokeStyle = "#bbb";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(cx - tile * 0.2, cy - tile * 0.1, tile * 0.4, tile * 0.25);
-          break;
-        case "merger":
-          stroke([[cx - tile * 0.15, py + tile * 0.2], [cx, cy]]);
-          stroke([[cx + tile * 0.15, py + tile * 0.2], [cx, cy]]);
-          stroke([[cx, cy], [cx, py + tile * 0.8]]);
-          break;
-        case "splitter":
-          // Y split: one in (bottom), two out (top-left, top-right)
-          stroke([[cx, py + tile * 0.8], [cx, cy]]);
-          stroke([[cx, cy], [cx - tile * 0.2, py + tile * 0.2]]);
-          stroke([[cx, cy], [cx + tile * 0.2, py + tile * 0.2]]);
-          break;
-        case "bin":
-          ctx.strokeStyle = "#aaa";
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(cx - tile * 0.15, py + tile * 0.15, tile * 0.3, tile * 0.1);
-          // fill level
-          const cap = this.game.binCapacity ? this.game.binCapacity() : 10;
-          const frac = Math.min(m.buffer.length / cap, 1);
-          if (frac > 0) {
-            ctx.fillStyle = "rgba(255,255,255,0.35)";
-            const fh = tile * 0.5 * frac;
-            ctx.fillRect(px + tile * 0.15, py + tile * 0.8 - fh, tile * 0.7, fh);
-          }
-          break;
-        case "recycler":
-          // X mark
-          stroke([[cx - tile * 0.15, cy - tile * 0.15], [cx + tile * 0.15, cy + tile * 0.15]]);
-          stroke([[cx - tile * 0.15, cy + tile * 0.15], [cx + tile * 0.15, cy - tile * 0.15]]);
-          break;
-      }
-
+      const bx = px + tile * 0.1;
+      const by = py + tile * 0.1;
+      const size = tile * 0.8;
+      ctx.fillStyle = busy ? busyColor : idle;
+      ctx.fillRect(bx, by, size, size);
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, by, size, size);
+      this._drawGlyph(ctx, m, px, py, tile);
       this._drawPorts(ctx, m.type, m.r, px, py, tile);
       ctx.restore();
 
@@ -342,104 +276,202 @@ export class Renderer {
     }
   }
 
+  /** The symbol on each machine, drawn in the machine's own frame (facing r). */
+  _drawGlyph(ctx, m, px, py, tile) {
+    const cx = px + tile / 2;
+    const cy = py + tile / 2;
+    const u = tile / 40; // drawn on a 40 px tile, scaled
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((m.r * Math.PI) / 2);
+    ctx.strokeStyle = "#eee";
+    ctx.fillStyle = "#eee";
+    ctx.lineWidth = 2 * u;
+    ctx.lineCap = "round";
+    const line = (pts) => {
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * u, y * u) : ctx.moveTo(x * u, y * u)));
+      ctx.stroke();
+    };
+    switch (m.type) {
+      case "cutter":
+        ctx.beginPath();
+        ctx.arc(0, 0, 8 * u, 0, Math.PI * 2);
+        ctx.fillStyle = "#d8d8e0";
+        ctx.fill();
+        line([[0, -8], [0, 8]]);
+        ctx.strokeStyle = "rgba(0,0,0,0.4)";
+        line([[0, -8], [0, 8]]);
+        break;
+      case "press":
+        ctx.fillRect(-7 * u, -9 * u, 14 * u, 5 * u);
+        line([[0, -4], [0, 2]]);
+        ctx.fillRect(-9 * u, 4 * u, 18 * u, 4 * u);
+        break;
+      case "combiner":
+        line([[-9, -8], [-2, 0]]);
+        line([[-9, 8], [-2, 0]]);
+        ctx.fillRect(-2 * u, -4 * u, 10 * u, 8 * u);
+        break;
+      case "encaser":
+        ctx.strokeRect(-8 * u, -8 * u, 16 * u, 16 * u);
+        ctx.fillRect(-4 * u, -4 * u, 8 * u, 8 * u);
+        break;
+      case "merger":
+        line([[-8, -8], [0, 0]]);
+        line([[-8, 8], [0, 0]]);
+        line([[-9, 0], [8, 0]]);
+        break;
+      case "splitter":
+        // a Y: in from the back, out left and right
+        line([[-9, 0], [0, 0]]);
+        line([[0, 0], [0, -9]]);
+        line([[0, 0], [0, 9]]);
+        break;
+      case "recycler":
+        line([[-6, -6], [6, 6]]);
+        line([[-6, 6], [6, -6]]);
+        break;
+      case "depot_s":
+      case "depot_m":
+      case "depot_l":
+        ctx.restore();
+        this._drawDepot(ctx, m, px, py, tile);
+        return;
+    }
+    ctx.restore();
+  }
+
+  _drawDepot(ctx, m, px, py, tile) {
+    const cap = m.handler.capacity;
+    const n = m.buffer.length + m.outputs.length;
+    const frac = Math.min(n / cap, 1);
+    const inset = { depot_s: 0.22, depot_m: 0.16, depot_l: 0.12 }[m.type];
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px + tile * inset, py + tile * inset, tile * (1 - inset * 2), tile * (1 - inset * 2));
+    if (frac > 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      const fh = tile * (1 - inset * 2) * frac;
+      ctx.fillRect(px + tile * inset, py + tile * (1 - inset) - fh, tile * (1 - inset * 2), fh);
+    }
+    if (m.stored) drawItemCached(ctx, m.stored, px + tile / 2, py + tile * 0.45, tile * 0.4, this.scale, { cb: this.settings.colorblind, detail: 0 });
+    if (n) {
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${tile * 0.2}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(n), px + tile / 2, py + tile * 0.78);
+    }
+  }
+
   _drawItems(ctx, tile, z) {
-    const flowLines = this.game.flowLines;
-    if (!flowLines) return;
     const cb = this.settings.colorblind;
     const motion = this.settings.motion;
-    for (const fl of flowLines.values()) {
+    const size = tile * 0.62;
+    for (const fl of this.game.flowLines.values()) {
       if (!fl.line.tiles.length) continue;
       for (const it of fl.items) {
         let d = it.pd === undefined ? it.d : it.pd + (it.d - it.pd) * this.alpha;
-        if (!motion) d = Math.round(d * 2) / 2; // snap to half tiles
+        if (!motion) d = Math.round(d * 2) / 2;
         const p = fl.posAt(d, tile);
         if ((p.z || 0) !== z) continue;
-        // overhead items get a small shadow offset for readability
+        if (!this._visible(Math.floor(p.x / tile), Math.floor(p.y / tile))) continue;
+        if (this.far) {
+          ctx.fillStyle = itemColor(it.item);
+          ctx.fillRect(p.x - tile * 0.22, p.y - tile * 0.22, tile * 0.44, tile * 0.44);
+          continue;
+        }
         if (z === 1) {
           ctx.fillStyle = "rgba(0,0,0,0.25)";
           ctx.beginPath();
           ctx.ellipse(p.x + 2, p.y + 3, tile * 0.3, tile * 0.15, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        drawItem(ctx, it.item, p.x, p.y, tile, { cb });
+        drawItemCached(ctx, it.item, p.x, p.y, size, this.scale, { cb, detail: 1 });
       }
     }
   }
 
   _drawHoppers(ctx, tile) {
-    const hoppers = this.game.hoppers;
-    if (!hoppers) return;
-    for (const h of hoppers) {
+    for (const h of this.game.hoppers) {
+      if (!this._visible(h.x, h.y)) continue;
       const px = h.x * tile;
       const py = h.y * tile;
       const cx = px + tile / 2;
       const cy = py + tile / 2;
       ctx.fillStyle = "#7a8a6a";
+      if (this.far) {
+        ctx.fillRect(px, py, tile, tile);
+        continue;
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(((h.dir + 3) * Math.PI) / 2); // funnel narrows toward the output side
       ctx.beginPath();
-      ctx.moveTo(px + tile * 0.2, py + tile * 0.1);
-      ctx.lineTo(px + tile * 0.8, py + tile * 0.1);
-      ctx.lineTo(px + tile * 0.65, py + tile * 0.9);
-      ctx.lineTo(px + tile * 0.35, py + tile * 0.9);
+      ctx.moveTo(-tile * 0.32, -tile * 0.4);
+      ctx.lineTo(tile * 0.32, -tile * 0.4);
+      ctx.lineTo(tile * 0.17, tile * 0.4);
+      ctx.lineTo(-tile * 0.17, tile * 0.4);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.3)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      drawItem(ctx, h.item, cx, cy, tile * 0.6, { cb: this.settings.colorblind });
-      const d = DIRS[h.dir];
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.beginPath();
-      const ax = cx + d.dx * tile * 0.38;
-      const ay = cy + d.dy * tile * 0.38;
-      const s = tile * 0.08;
-      ctx.moveTo(ax + d.dx * s, ay + d.dy * s);
-      ctx.lineTo(ax - d.dx * s - d.dy * s * 0.7, ay - d.dy * s + d.dx * s * 0.7);
-      ctx.lineTo(ax - d.dx * s + d.dy * s * 0.7, ay - d.dy * s - d.dx * s * 0.7);
-      ctx.closePath();
-      ctx.fill();
+      ctx.restore();
+      drawItemCached(ctx, h.item, cx, cy, tile * 0.5, this.scale, { cb: this.settings.colorblind });
+      this._drawPorts(ctx, "hopper", h.dir, px, py, tile);
     }
   }
 
   _drawDock(ctx, tile) {
     const dock = this.game.dock;
-    const pos = this.game.dockPos;
-    if (!dock || !pos) return;
-    const px = pos.x * tile;
-    const py = pos.y * tile;
-    const cx = px + tile / 2;
-    const cy = py + tile / 2;
-
-    const glow = dock.rejectFlash > 0 ? "rgba(200,80,60,0.4)" :
-                 dock.complete ? "rgba(80,180,100,0.4)" : "rgba(60,100,160,0.3)";
-    ctx.fillStyle = glow;
-    ctx.fillRect(px - 2, py - 2, tile + 4, tile + 4);
-    ctx.fillStyle = dock.complete ? "#5a9e6c" : "#4a6a8a";
-    ctx.fillRect(px, py, tile, tile);
-    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    if (!dock) return;
+    const px = dock.x * tile;
+    const py = dock.y * tile;
+    const s = tile * 2;
+    const main = dock.main;
+    const done = !main;
+    ctx.fillStyle = dock.rejectFlash > 0 ? "rgba(200,80,60,0.35)" : "rgba(60,100,160,0.3)";
+    ctx.fillRect(px - 3, py - 3, s + 6, s + 6);
+    ctx.fillStyle = done ? "#5a7a6c" : "#4a6a8a";
+    ctx.fillRect(px, py, s, s);
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.lineWidth = 2;
-    ctx.strokeRect(px, py, tile, tile);
-
-    drawItem(ctx, dock.target, cx, cy - tile * 0.12, tile * 0.62, { cb: this.settings.colorblind });
-
+    ctx.strokeRect(px, py, s, s);
+    if (this.far) return;
     ctx.fillStyle = "#fff";
-    ctx.font = `bold ${tile * 0.25}px system-ui`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${dock.accepted}/${dock.amount}`, cx, cy + tile * 0.32);
-
-    // state glyph (never color-only)
-    ctx.font = `bold ${tile * 0.3}px system-ui`;
-    if (dock.complete) {
-      ctx.fillText("OK", cx, py - tile * 0.25);
-    } else if (dock.rejectFlash > 0) {
-      ctx.fillStyle = "#ffd9d4";
-      ctx.fillText("NO", cx, py - tile * 0.25);
+    if (main) {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(px + s * 0.18, py + s * 0.1, s * 0.64, s * 0.55);
+      drawItem(ctx, main.item, px + s / 2, py + s * 0.375, s * 0.5, { cb: this.settings.colorblind, detail: 2 });
+      // progress bar
+      const bw = s * 0.76;
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.fillRect(px + s * 0.12, py + s * 0.74, bw, s * 0.08);
+      ctx.fillStyle = "#7fd39a";
+      ctx.fillRect(px + s * 0.12, py + s * 0.74, bw * Math.min(main.accepted / main.amount, 1), s * 0.08);
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${tile * 0.28}px system-ui`;
+      ctx.fillText(`${main.accepted}/${main.amount}`, px + s / 2, py + s * 0.9);
+    } else {
+      ctx.font = `bold ${tile * 0.3}px system-ui`;
+      ctx.fillText("Dock", px + s / 2, py + s / 2);
     }
+    // side order slots: small icons along the top edge
+    dock.slots.slice(1).forEach((slot, i) => {
+      if (!slot) return;
+      const sx = px + s * (0.25 + i * 0.5);
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(sx - tile * 0.25, py - tile * 0.55, tile * 0.5, tile * 0.5);
+      drawItem(ctx, slot.item, sx, py - tile * 0.3, tile * 0.42, { cb: this.settings.colorblind });
+    });
   }
 
-  /** A red bar where a belt ends against a machine side with no input. */
+  /** A red X where a belt ends against a machine side with no input. */
   _drawWrongSides(ctx, tile) {
-    if (!this.game.wrongSideEnds) return;
     for (const w of this.game.wrongSideEnds()) {
       const d = DIRS[w.dir];
       const cx = (w.x + 0.5 + d.dx * 0.5) * tile;
@@ -460,8 +492,7 @@ export class Renderer {
   _drawJam(ctx, tile) {
     const jam = this.game.jam;
     if (!jam) return;
-    const parts = jam.key.split(",").map(Number);
-    const [x, y] = parts;
+    const [x, y] = jam.key.split(",").map(Number);
     const a = this.settings.motion ? 0.5 + 0.4 * Math.sin(this._t * 0.2) : 0.8;
     ctx.strokeStyle = `rgba(90,140,220,${a.toFixed(2)})`;
     ctx.lineWidth = 4;
@@ -472,8 +503,7 @@ export class Renderer {
   }
 
   _drawSelection(ctx, colors, tile) {
-    const p = this.selected.split(",").map(Number);
-    const [x, y] = p;
+    const [x, y] = this.selected.split(",").map(Number);
     ctx.strokeStyle = colors.selection;
     ctx.lineWidth = 3;
     ctx.strokeRect(x * tile + 2, y * tile + 2, tile - 4, tile - 4);
@@ -524,7 +554,6 @@ export class Renderer {
     ctx.setLineDash([6, 4]);
     ctx.strokeRect(x0 * tile, y0 * tile, w * tile, h * tile);
     ctx.setLineDash([]);
-    // mark what will go
     for (let y = y0; y < y0 + h; y++) {
       for (let x = x0; x < x0 + w; x++) {
         if (this.world.stackAt(x, y).some((m) => !m.fixed)) {

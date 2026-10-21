@@ -23,8 +23,11 @@ export function parseKey(key) {
   return { x: p[0], y: p[1], z: p[2] || 0 };
 }
 
+/** Zones are { x, y, w, h }; x and y default to 0 (the plot can grow outward). */
 export function inZone(x, y, zone) {
-  return x >= 0 && y >= 0 && x < zone.w && y < zone.h;
+  const zx = zone.x || 0;
+  const zy = zone.y || 0;
+  return x >= zx && y >= zy && x < zx + zone.w && y < zy + zone.h;
 }
 
 // Tile directly before `dir` (where items arrive from)

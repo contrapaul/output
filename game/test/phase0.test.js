@@ -3,7 +3,7 @@
 // Covers roadmap.md Phase 0 automatic checks:
 //   - edit while running (place, remove, rotate on full lines): no item loss
 //   - splitter routes (1 in, 1 out), alternates, never duplicates
-//   - credits earned is a real number (no NaN)
+//   - credits are real numbers (no NaN)
 //   - conservation: items in world = injected + emitted - delivered - recycled
 //     - partsRemoved, including a 5-minute random edit script (seeded)
 
@@ -13,8 +13,8 @@ import assert from "node:assert/strict";
 import { GameRoot } from "../src/game/root.js";
 import { tileKey } from "../src/core/grid.js";
 
-const INING = "silicon_ingot";
-const COIL = "copper_coil";
+const INING = "m1";
+const COIL = "press(m2)";
 
 function newGame(zone = { w: 12, h: 6 }) {
   return new GameRoot({ id: "phase0", zone });
@@ -126,88 +126,78 @@ test("rotate while running (remove + place): items on surviving tiles kept", () 
   assertConservation(g, 2);
 });
 
+// The splitter is a Y (Phase 2): in at the back, out left then right.
+// Facing right at (2,1): left exit is up (2,0), right exit is down (2,2).
+function splitterRig(g, sinkA = "depot_s", sinkB = "depot_s") {
+  g.placeMachine("belt", 1, 1, 0);
+  g.placeMachine("splitter", 2, 1, 0);
+  g.placeMachine("belt", 2, 0, 0);
+  g.placeMachine(sinkA, 3, 0, 0); // exit A (left)
+  g.placeMachine("belt", 2, 2, 0);
+  g.placeMachine(sinkB, 3, 2, 0); // exit B (right)
+}
+
 test("splitter: parts alternate between two open exits", () => {
   const g = newGame();
-  g.placeMachine("belt", 1, 0, 0);
-  g.placeMachine("splitter", 2, 0, 0);
-  g.placeMachine("belt", 3, 0, 0);
-  g.placeMachine("bin", 4, 0, 0);      // exit A (dir 0)
-  g.placeMachine("belt", 2, 1, 0);
-  g.placeMachine("bin", 3, 1, 0);      // exit B (dir 1)
-  const binA = machineAt(g, 4, 0);
-  const binB = machineAt(g, 3, 1);
-  // a bin holds parts in its buffer plus (with no downstream) one in its
+  splitterRig(g);
+  const binA = machineAt(g, 3, 0);
+  const binB = machineAt(g, 3, 2);
+  // a depot holds parts in its buffer plus (with no downstream) one in its
   // output slot, so count both
   const total = (b) => b.buffer.length + b.outputs.length;
 
   const seq = [];
   let prevA = 0, prevB = 0, fed = 0;
-  // feed 4 parts, paced one per clear feed belt, and wait until all 4 are
-  // stored in the bins
   for (let i = 0; i < 1800 && total(binA) + total(binB) < 4; i++) {
     g.tick();
     if (total(binA) > prevA) { seq.push("A"); prevA = total(binA); }
     if (total(binB) > prevB) { seq.push("B"); prevB = total(binB); }
     if (fed < 4) {
-      const fl = flowAt(g, 1, 0);
+      const fl = flowAt(g, 1, 1);
       if (fl.count() === 0 && fl.accept(COIL, 0)) fed++;
     }
   }
   assert.equal(fed, 4, "4 parts fed in");
   assert.equal(total(binA) + total(binB), 4, "no loss, no duplication");
-  assert.equal(total(binA), 2, "exit A got 2 parts");
-  assert.equal(total(binB), 2, "exit B got 2 parts");
   assert.deepEqual(seq, ["A", "B", "A", "B"], "exits alternate when both have room");
 });
 
 test("splitter: blocked preferred exit falls through to the other", () => {
   const g = newGame();
-  g.placeMachine("belt", 0, 0, 0);
-  g.placeMachine("belt", 1, 0, 0);
-  g.placeMachine("splitter", 2, 0, 0);
-  g.placeMachine("belt", 3, 0, 0);
-  g.placeMachine("bin", 4, 0, 0);      // exit A (preferred, cursor 0)
-  g.placeMachine("belt", 2, 1, 0);
-  g.placeMachine("bin", 3, 1, 0);      // exit B
-  const binA = machineAt(g, 4, 0);
-  const binB = machineAt(g, 3, 1);
+  g.placeMachine("belt", 0, 1, 0);
+  splitterRig(g);
+  const binA = machineAt(g, 3, 0);
+  const binB = machineAt(g, 3, 2);
+  const cap = binA.handler.capacity;
 
   // fill exit A solid: buffer at capacity plus one part in its output slot
-  for (let i = 0; i < g.binCapacity(); i++) binA.buffer.push(COIL);
+  for (let i = 0; i < cap; i++) binA.buffer.push(COIL);
   binA.outputs.push(COIL);
   const total = (b) => b.buffer.length + b.outputs.length;
 
   let injected = 0;
-  // feed 3 parts, paced one per clear feed belt, and wait until 2 are
-  // stored in bin B (the first parks on the exit-A belt, which buffers one
-  // part against the full bin - that is correct belt behaviour, not a loss)
   for (let i = 0; i < 1800 && total(binB) < 2; i++) {
     g.tick();
     if (injected < 3) {
-      const fl = flowAt(g, 0, 0);
+      const fl = flowAt(g, 0, 1);
       if (fl.count() === 0 && fl.accept(COIL, 0)) injected++;
     }
   }
   assert.equal(injected, 3, "3 parts fed in");
-  assert.equal(total(binA), 11, "full bin A was not overflowed");
+  assert.equal(total(binA), cap + 1, "full depot A was not overflowed");
   assert.equal(total(binB), 2, "2 parts routed to open exit B");
-  assert.equal(flowAt(g, 3, 0).count(), 1, "1 part waits on the blocked exit-A belt");
-  assert.equal(g.itemCount(), 11 + 2 + 1, "no part lost or duplicated (bin A + bin B + parked)");
+  assert.equal(flowAt(g, 2, 0).count(), 1, "1 part waits on the blocked exit-A belt");
+  assert.equal(g.itemCount(), cap + 1 + 2 + 1, "no part lost or duplicated");
 });
 
 test("splitter: one in, one out (conservation, no duplication)", () => {
   const g = newGame();
-  g.placeMachine("belt", 1, 0, 0);
-  g.placeMachine("splitter", 2, 0, 0);
-  g.placeMachine("belt", 3, 0, 0);
-  g.placeMachine("recycler", 4, 0, 0);   // drain exit A
-  g.placeMachine("belt", 2, 1, 0);
-  g.placeMachine("recycler", 3, 1, 0);   // drain exit B
+  splitterRig(g, "recycler", "recycler");
 
   let injected = 0;
   for (let i = 0; i < 1800 && injected < 6; i++) {
     g.tick();
-    const fl = flowAt(g, 1, 0);
+    const fl = flowAt(g, 1, 1);
     if (fl.accept(COIL, 0)) injected++;
   }
   for (let i = 0; i < 1800 && g.recycled < 6; i++) g.tick();
@@ -217,25 +207,24 @@ test("splitter: one in, one out (conservation, no duplication)", () => {
   assertConservation(g, 6);
 });
 
-test("credits: contract complete reports a real earned amount (no NaN)", () => {
+test("credits: each delivered part pays a real number (no NaN)", () => {
   const g = new GameRoot({
-    id: "phase0-credits", zone: { w: 10, h: 4 },
+    zone: { w: 10, h: 4 },
     fixed: [
-      { t: "hopper_ingot", x: 0, y: 1, r: 0 },
+      { t: "hopper", item: "m1", x: 0, y: 1, r: 0 },
       { t: "dock", x: 7, y: 1, r: 0 },
     ],
-    target: { item: INING, amount: 10 },
+    target: { item: INING, amount: 10, creditEach: 5 },
   });
   for (let x = 1; x <= 6; x++) g.placeMachine("belt", x, 1, 0);
 
-  let payload = null;
-  g.signals.on("contractComplete", (p) => { payload = p; });
+  let filled = null;
+  g.signals.on("orderFilled", (p) => { filled = p; });
   for (let i = 0; i < 6000 && !g.dock.complete; i++) g.tick();
   assert.equal(g.dock.complete, true);
-  assert.ok(payload, "contractComplete fired");
-  assert.ok(Number.isFinite(payload.earned), `earned must be a number, got ${payload.earned}`);
-  assert.equal(payload.earned, 50, "10 items x 5 credits");
-  assert.equal(g.coinsEarnedHere, 50);
+  assert.ok(filled, "orderFilled fired");
+  assert.ok(Number.isFinite(g.coins), `coins must be a number, got ${g.coins}`);
+  assert.equal(g.coins, 50, "10 items x 5 credits");
   assert.equal(g.delivered, 10);
   assertConservation(g);
 });
@@ -252,27 +241,20 @@ function mulberry32(seed) {
 
 test("conservation under random edits: 150 s of sandbox edits, zero drift", () => {
   const zone = { w: 12, h: 8 };
-  const g = new GameRoot({ id: "phase0-random", zone });
+  const g = new GameRoot({ zone });
 
-  // factory (rows 0,1,3): splitter, bins, merger, recycler - no production
-  // machines, so injected - recycled - removed is the exact ledger
-  g.placeMachine("splitter", 2, 0, 0);
-  g.placeMachine("belt", 3, 0, 0);
-  g.placeMachine("bin", 4, 0, 0);          // splitter exit A
-  g.placeMachine("belt", 2, 1, 0);
-  g.placeMachine("belt", 3, 1, 0);
-  g.placeMachine("bin", 4, 1, 0);          // splitter exit B
-  g.placeMachine("merger", 2, 3, 0);
-  g.placeMachine("belt", 3, 3, 0);
-  g.placeMachine("recycler", 4, 3, 0);
-  // upstream feed belts
-  g.placeMachine("belt", 1, 0, 0);
-  g.placeMachine("belt", 1, 3, 0);
+  // factory: splitter (Y) into two depots, merger into a recycler - no
+  // cutters or combiners, so the ledger is injected - recycled - removed
+  splitterRig(g);
+  g.placeMachine("belt", 1, 4, 0);
+  g.placeMachine("merger", 2, 4, 0);
+  g.placeMachine("belt", 3, 4, 0);
+  g.placeMachine("recycler", 4, 4, 0);
 
   const factoryBelts = [
-    { x: 1, y: 0 }, { x: 3, y: 0 }, { x: 2, y: 1 }, { x: 3, y: 1 }, { x: 1, y: 3 }, { x: 3, y: 3 },
+    { x: 1, y: 1 }, { x: 2, y: 0 }, { x: 2, y: 2 }, { x: 1, y: 4 }, { x: 3, y: 4 },
   ];
-  const freeRows = [2, 5, 6, 7]; // random belts live here, out of the factory's way
+  const freeRows = [5, 6, 7]; // random belts live here, out of the factory's way
   const placed = []; // belts the script placed: { x, y, r }
   const rng = mulberry32(20261015);
 
@@ -291,7 +273,7 @@ test("conservation under random edits: 150 s of sandbox edits, zero drift", () =
 
   for (let t = 0; t < TOTAL; t++) {
     g.tick();
-    if (t % 60 === 0) { feedAt(1, 0); feedAt(1, 3); } // keep parts moving
+    if (t % 60 === 0) { feedAt(1, 1); feedAt(1, 4); } // keep parts moving
 
     if (t % EDIT_EVERY !== 0) continue;
     const roll = rng();

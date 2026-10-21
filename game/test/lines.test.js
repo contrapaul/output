@@ -177,7 +177,7 @@ test("overhead belts cross ground belts in the same tile", () => {
 
 test("overhead cannot be placed over a machine", () => {
   const w = makeWorld();
-  w.place("saw", 4, 3, 0);
+  w.place("cutter", 4, 3, 0);
   assert.equal(w.place("belt_high", 4, 3, 0, 1), null);
 });
 
@@ -189,9 +189,9 @@ test("ground belt cannot be placed where overhead exists", () => {
 
 test("machines occupy a ground tile and block belts", () => {
   const w = makeWorld();
-  w.place("saw", 3, 3, 0);
+  w.place("cutter", 3, 3, 0);
   assert.equal(w.place("belt", 3, 3, 0), null);
-  assert.equal(w.place("bin", 3, 3, 0), null);
+  assert.equal(w.place("depot_s", 3, 3, 0), null);
 });
 
 test("rebuild reproduces the same lines as incremental", () => {

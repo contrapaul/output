@@ -6,7 +6,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { FlowLine } from "../src/game/systems/flow.js";
-import { Dock } from "../src/game/systems/dock.js";
+import { OrderDock } from "../src/game/systems/dock.js";
+
+function Dock(item, amount) {
+  const d = new OrderDock(0, 0);
+  d.setSlot(0, { item, amount });
+  return d;
+}
 import { CONFIG } from "../src/core/config.js";
 
 function makeLine(tiles) {
@@ -31,7 +37,7 @@ const straight = (n) => Array.from({ length: n }, (_, i) => ({ x: i, y: 0, z: 0,
 
 test("item advances at belt rate", () => {
   const flow = new FlowLine(makeLine(straight(5)), null);
-  flow.accept("silicon_ingot");
+  flow.accept("m1");
   const velocity = CONFIG.BELT_RATE / 30;
   const startD = flow.items[0].d;
   flow.step(velocity, () => false);
@@ -133,37 +139,37 @@ test("posAt on overhead line keeps layer z", () => {
 // ---- Dock tests -----------------------------------------------------------
 
 test("dock accepts target item", () => {
-  const dock = new Dock("silicon_wafer", 10);
-  assert.equal(dock.tryAccept("silicon_wafer"), true);
-  assert.equal(dock.accepted, 1);
+  const dock = Dock("cut(m1)", 10);
+  assert.ok(dock.tryAccept("cut(m1)"));
+  assert.equal(dock.main.accepted, 1);
 });
 
 test("dock rejects wrong item", () => {
-  const dock = new Dock("silicon_wafer", 10);
-  assert.equal(dock.tryAccept("silicon_ingot"), false);
-  assert.equal(dock.lastReject, "silicon_ingot");
+  const dock = Dock("cut(m1)", 10);
+  assert.equal(dock.tryAccept("m1"), null);
+  assert.equal(dock.lastReject, "m1");
 });
 
 test("dock completes at target amount", () => {
-  const dock = new Dock("silicon_wafer", 3);
-  dock.tryAccept("silicon_wafer");
-  dock.tryAccept("silicon_wafer");
+  const dock = Dock("cut(m1)", 3);
+  dock.tryAccept("cut(m1)");
+  dock.tryAccept("cut(m1)");
   assert.equal(dock.complete, false);
-  dock.tryAccept("silicon_wafer");
+  dock.tryAccept("cut(m1)");
   assert.equal(dock.complete, true);
-  assert.equal(dock.tryAccept("silicon_wafer"), false);
+  assert.equal(dock.tryAccept("cut(m1)"), null, "a filled order takes no more");
 });
 
 // ---- Conservation test ----------------------------------------------------
 
 test("conservation: items in = items out (no creation/destruction)", () => {
   const flow = new FlowLine(makeLine(straight(4)), null);
-  const dock = new Dock("silicon_ingot", 10);
+  const dock = Dock("m1", 10);
   let emitted = 0, accepted = 0;
   const velocity = CONFIG.BELT_RATE / 30;
   for (let tick = 0; tick < 600; tick++) {
     if (tick % 30 === 0 && emitted < 10) {
-      if (flow.accept("silicon_ingot")) emitted++;
+      if (flow.accept("m1")) emitted++;
     }
     const ejected = flow.step(velocity, () => true);
     for (const item of ejected) {
@@ -173,6 +179,6 @@ test("conservation: items in = items out (no creation/destruction)", () => {
       `tick ${tick}: inWorld=${flow.count()}, emitted=${emitted}, accepted=${accepted}`);
     if (dock.complete) break;
   }
-  assert.equal(dock.accepted, 10);
+  assert.equal(dock.main.accepted, 10);
   assert.equal(flow.count(), 0);
 });

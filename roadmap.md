@@ -16,7 +16,8 @@ This plan is written for two readers:
 
 - **Phase 0 (repair) is done.** Items survive edits, the splitter no longer duplicates, credits are real numbers, conservation is tested (86 tests). Paul played it on 2026-10-21: "it works but of course is extremely barebones." Human gate passed.
 - **Deploys work.** Cloudflare Workers Builds (root directory `game`, `wrangler.jsonc` at the repo root) has been green since commit `b5068e6`.
-- **Phase 1 (building feels good) is built** and waiting for the human gate (see `STATUS.md`).
+- **Phase 1 (building feels good) is done** (gate passed 2026-10-21).
+- **Phase 2 (one growing factory) is built** and waiting for the human gate (see `STATUS.md`).
 
 **Still wrong by design (fixed in Phases 1 and 2):**
 
@@ -106,7 +107,7 @@ Each phase has: a goal, tasks, **automatic checks** (the model must make these p
 
 ### Phase 0: Repair and re-baseline (S) ✅ done 2026-10-21
 
-### Phase 1: Building feels good (M)
+### Phase 1: Building feels good (M) ✅ done 2026-10-21
 
 Goal: placing and fixing a factory is quick and satisfying. This matters more than any new content.
 

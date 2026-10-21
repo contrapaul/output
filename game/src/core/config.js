@@ -9,6 +9,8 @@ export const CONFIG = {
   COLORS: {
     light: {
       bg: "#f4f1ea",
+      outside: "#d9d3c6",
+      edge: "#b9b1a2",
       grid: "#e2ddd2",
       belt: "#b8b0a4",
       beltLine: "#8f877b",
@@ -18,6 +20,8 @@ export const CONFIG = {
     },
     dark: {
       bg: "#1d1f24",
+      outside: "#121317",
+      edge: "#3a3e48",
       grid: "#2c2f38",
       belt: "#4a4d57",
       beltLine: "#6a6d78",

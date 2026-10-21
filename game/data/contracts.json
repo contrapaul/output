@@ -1,0 +1,164 @@
+{
+  "_about": "Placeholder contracts (Phase 2) using abstract items. Paul replaces these with the real progression. Fields: item (canonical id), amount, creditEach (credits per part delivered), unlock (machine ids added to the toolbar when this contract is done), milestone (true: the plot grows to the next stage in plot.json and the camera pulls out).",
+  "start": {
+    "unlocked": [
+      "belt"
+    ]
+  },
+  "list": [
+    {
+      "id": "c01",
+      "title": "First delivery",
+      "brief": "Deliver 10 M1.",
+      "item": "m1",
+      "amount": 10,
+      "creditEach": 1,
+      "unlock": [
+        "cutter"
+      ]
+    },
+    {
+      "id": "c02",
+      "title": "Cut in half",
+      "brief": "Deliver 10 M1 half.",
+      "item": "cut(m1)",
+      "amount": 10,
+      "creditEach": 2,
+      "unlock": [
+        "press"
+      ]
+    },
+    {
+      "id": "c03",
+      "title": "Pressed",
+      "brief": "Deliver 10 pressed M2.",
+      "item": "press(m2)",
+      "amount": 10,
+      "creditEach": 2,
+      "unlock": [
+        "merger",
+        "splitter"
+      ]
+    },
+    {
+      "id": "c04",
+      "title": "Quarters",
+      "brief": "Deliver 16 M1 quarter.",
+      "item": "cut(cut(m1))",
+      "amount": 16,
+      "creditEach": 3,
+      "unlock": [
+        "depot_s"
+      ]
+    },
+    {
+      "id": "c05",
+      "title": "Two steps",
+      "brief": "Deliver 20 pressed M2 half.",
+      "item": "press(cut(m2))",
+      "amount": 20,
+      "creditEach": 3,
+      "unlock": [
+        "combiner"
+      ],
+      "milestone": true
+    },
+    {
+      "id": "c06",
+      "title": "First assembly",
+      "brief": "Deliver 10 M1 half + M3.",
+      "item": "join(cut(m1)|m3)",
+      "amount": 10,
+      "creditEach": 3,
+      "unlock": [
+        "belt_high"
+      ]
+    },
+    {
+      "id": "c07",
+      "title": "Mixed parts",
+      "brief": "Deliver 12 M3 half + pressed M2.",
+      "item": "join(cut(m3)|press(m2))",
+      "amount": 12,
+      "creditEach": 3,
+      "unlock": [
+        "recycler"
+      ]
+    },
+    {
+      "id": "c08",
+      "title": "Fine work",
+      "brief": "Deliver 15 M1 quarter + pressed M2.",
+      "item": "join(cut(cut(m1))|press(m2))",
+      "amount": 15,
+      "creditEach": 4,
+      "unlock": [
+        "depot_m"
+      ]
+    },
+    {
+      "id": "c09",
+      "title": "Double",
+      "brief": "Deliver 10 M3 + M3.",
+      "item": "join(m3|m3)",
+      "amount": 10,
+      "creditEach": 2
+    },
+    {
+      "id": "c10",
+      "title": "Stacked",
+      "brief": "Deliver 10 (M1 half + M3) + pressed M2.",
+      "item": "join(join(cut(m1)|m3)|press(m2))",
+      "amount": 10,
+      "creditEach": 4,
+      "unlock": [
+        "encaser"
+      ],
+      "milestone": true
+    },
+    {
+      "id": "c11",
+      "title": "First product",
+      "brief": "Deliver 10 (M1 half + M3) in M4 shell.",
+      "item": "case(join(cut(m1)|m3)|m4)",
+      "amount": 10,
+      "creditEach": 4
+    },
+    {
+      "id": "c12",
+      "title": "Pressed shell",
+      "brief": "Deliver 12 (M3 half + pressed M2) in pressed M4 shell.",
+      "item": "case(join(cut(m3)|press(m2))|press(m4))",
+      "amount": 12,
+      "creditEach": 4,
+      "unlock": [
+        "depot_l"
+      ]
+    },
+    {
+      "id": "c13",
+      "title": "Half shell",
+      "brief": "Deliver 15 (M1 quarter + pressed M2) in M4 half shell.",
+      "item": "case(join(cut(cut(m1))|press(m2))|cut(m4))",
+      "amount": 15,
+      "creditEach": 5
+    },
+    {
+      "id": "c14",
+      "title": "Bundle",
+      "brief": "Deliver 10 ((M1 half + M3) in M4 shell) + pressed M2.",
+      "item": "join(case(join(cut(m1)|m3)|m4)|press(m2))",
+      "amount": 10,
+      "creditEach": 5
+    },
+    {
+      "id": "c15",
+      "title": "Big order",
+      "brief": "Deliver 20 ((M1 half + M3) + pressed M2) in M4 shell.",
+      "item": "case(join(join(cut(m1)|m3)|press(m2))|m4)",
+      "amount": 20,
+      "creditEach": 5,
+      "milestone": true
+    }
+  ]
+}

@@ -1,179 +1,170 @@
-// Machine processing system (M3).
+// Machine processing (Phase 2).
+//
+// Operation machines are built from data/operations.json (open operations,
+// no per-item recipes):
+//   cutter    one part in, two halves out          cut(p)
+//   press     one part in, one pressed part out    press(p)
+//   combiner  any two items in, one assembly out   join(a|b)
+//   encaser   one assembly + one shell part in     case(assembly|shell)
+//
+// Logistics machines are code:
+//   merger    any part, passes it on (several belts in, one out)
+//   splitter  one in, sends each part left or right (a Y), alternating
+//   recycler  removes any part (sink)
+//   depot_s/m/l  storage: stacks one kind of part (50/200/1000) and feeds it
+//                out the front, so a full depot works like a hopper
 //
 // Each machine instance has:
-//   - inputs:  items waiting in input slots
-//   - buffer:  bin-style storage (FIFO) for buffer machines
-//   - outputs: items ready to eject
-//   - charge:  accumulated processing time (fractional, carries over ticks)
+//   inputs   items waiting in input slots
+//   buffer   storage (depots)
+//   outputs  items ready to eject
+//   charge   processing time so far (fractional, carries over ticks)
 //
-// Per tick, for each machine (stable order):
-//   1. Buffer machines (bin): move one buffered item into the output slot
-//      if the output slot is empty, then try to eject.
-//   2. Other machines: if all required inputs are present and the output
-//      slot is empty, accumulate charge (motor2x upgrade doubles this rate).
-//      When charge >= chargeTime, run process().
-//   3. process(inputs) returns { outputs, left }:
-//        outputs  -> items placed in the output slots (ejected next)
-//        left     -> inputs NOT consumed; they stay in the machine (M3 form)
-//      Returning a plain array is accepted and treated as { outputs: arr }.
-//   4. Eject outputs into downstream (belt line, machine, or dock).
-//      A machine's output direction is its rotation r; handlers with
-//      outDirs (splitter) send successive outputs to r+outDirs[0],
-//      r+outDirs[1], ...
-//
-// Machines:
-//   saw       ingot -> 2 wafers, wafer -> 2 dies
-//   press     wire -> coil
-//   solder    die + coil -> board
-//   mounter   board + cell -> module
-//   encap     module + housing -> device
-//   merger    any -> any (pass-through)
-//   splitter  any -> same part, routed to one of two exits (alternating)
-//   bin       any -> stored (FIFO, capacity 10, upgrade bin20 -> 20)
-//   recycler  any -> nothing (sink: the clean way to remove a part)
+// Handler interface used by GameRoot:
+//   needs                 inputs needed to start a job
+//   canTake(item, held)   may this item join the items already held?
+//   oneEachSide           takes at most one part per input side (combiner),
+//                         so two belts make a pair and one belt cannot
+//                         pair with itself
+//   process(inputs)       -> { outputs, left }
+//   chargeTime            seconds per job
+//   buffer, capacity      storage machines
+//   outDirs               exit sides (local), alternated (splitter)
+//   sink                  consumes parts (counts as recycled)
+//   inText / outText      plain words for the hover card
 
-export const HANDLERS = {
-  saw: {
+import { operations } from "../../data/index.js";
+import { isPart, isPressed, isAssembly, isShell, depth, make, DEPTH_LIMIT } from "../items.js";
+
+const OPS = {
+  cut: {
     needs: 1,
-    inText: "a silicon ingot or a silicon wafer",
-    outText: "2 silicon wafers (or 2 silicon dies)",
-    canTake: (item) => item === "silicon_ingot" || item === "silicon_wafer",
-    chargeTime: 0.5,
-    process: (inputs) => {
-      if (inputs.length !== 1) return null;
-      const [item] = inputs;
-      if (item === "silicon_ingot") return { outputs: ["silicon_wafer", "silicon_wafer"], left: [] };
-      if (item === "silicon_wafer") return { outputs: ["silicon_die", "silicon_die"], left: [] };
-      return null;
-    },
+    inText: "one part that is not pressed",
+    outText: "two halves of it",
+    canTake: (item, held) => held.length === 0 && isPart(item) && !isPressed(item) && depth(item) < DEPTH_LIMIT,
+    output: ([p]) => [make.cut(p), make.cut(p)],
   },
   press: {
     needs: 1,
-    inText: "a copper wire",
-    outText: "a copper coil",
-    canTake: (item) => item === "copper_wire",
-    chargeTime: 0.5,
-    process: (inputs) => {
-      if (inputs.length !== 1 || inputs[0] !== "copper_wire") return null;
-      return { outputs: ["copper_coil"], left: [] };
-    },
+    inText: "one part that is not pressed",
+    outText: "a pressed part",
+    canTake: (item, held) => held.length === 0 && isPart(item) && !isPressed(item) && depth(item) < DEPTH_LIMIT,
+    output: ([p]) => [make.press(p)],
   },
-  solder: {
+  join: {
     needs: 2,
-    inText: "a silicon die and a copper coil",
-    outText: "a circuit board",
-    canTake: (item) => item === "silicon_die" || item === "copper_coil",
-    chargeTime: 0.8,
-    process: (inputs) => {
-      if (inputs.length !== 2) return null;
-      const sorted = [...inputs].sort();
-      if (sorted[0] === "copper_coil" && sorted[1] === "silicon_die") {
-        return { outputs: ["solder(copper_coil|silicon_die)"], left: [] };
-      }
-      return null;
-    },
+    inText: "any two items, one from each side",
+    outText: "one assembly made of both",
+    oneEachSide: true,
+    canTake: (item, held) => held.length < 2 && depth(item) < DEPTH_LIMIT,
+    output: ([a, b]) => [make.join(a, b)],
   },
-  mounter: {
+  case: {
     needs: 2,
-    inText: "a circuit board and a battery cell",
-    outText: "a module",
-    canTake: (item) =>
-      item === "solder(copper_coil|silicon_die)" || item === "battery_cell",
-    chargeTime: 0.8,
-    process: (inputs) => {
-      if (inputs.length !== 2) return null;
-      const sorted = [...inputs].sort();
-      if (
-        sorted[0] === "battery_cell" &&
-        sorted[1] === "solder(copper_coil|silicon_die)"
-      ) {
-        return { outputs: ["mount(battery_cell|solder(copper_coil|silicon_die))"], left: [] };
-      }
-      return null;
+    inText: "an assembly and a shell part",
+    outText: "a finished product",
+    canTake: (item, held) => {
+      if (held.length >= 2 || depth(item) >= DEPTH_LIMIT) return false;
+      if (isAssembly(item)) return !held.some(isAssembly);
+      if (isShell(item)) return !held.some(isShell);
+      return false;
     },
-  },
-  encap: {
-    needs: 2,
-    inText: "a module and a housing",
-    outText: "a finished device",
-    canTake: (item) =>
-      item === "mount(battery_cell|solder(copper_coil|silicon_die))" ||
-      item === "housing",
-    chargeTime: 0.8,
-    process: (inputs) => {
-      if (inputs.length !== 2) return null;
-      const sorted = [...inputs].sort();
-      if (
-        sorted[0] === "housing" &&
-        sorted[1] === "mount(battery_cell|solder(copper_coil|silicon_die))"
-      ) {
-        return { outputs: ["encap(housing|mount(battery_cell|solder(copper_coil|silicon_die)))"], left: [] };
-      }
-      return null;
-    },
-  },
-  merger: {
-    needs: 1,
-    inText: "any part, from two lines",
-    outText: "the same part, on one line",
-    canTake: () => true,
-    chargeTime: 0,
-    process: (inputs) => {
-      if (inputs.length !== 1) return null;
-      return { outputs: [inputs[0]], left: [] };
-    },
-  },
-  splitter: {
-    needs: 1,
-    inText: "any part",
-    outText: "the same part, to one of two exits",
-    canTake: () => true,
-    chargeTime: 0.2,
-    outDirs: [0, 1], // exits at r and r+1; parts alternate when both have room
-    process: (inputs) => {
-      if (inputs.length !== 1) return null;
-      return { outputs: [inputs[0]], left: [] };
-    },
-  },
-  bin: {
-    needs: 1,
-    inText: "any part (stores up to 10)",
-    outText: "the same part, in order",
-    buffer: true,
-    capacity: 10,
-    canTake: () => true,
-    chargeTime: 0,
-    process: null, // buffer machine: handled by the root tick
-  },
-  recycler: {
-    needs: 1,
-    sink: true, // consumes items; GameRoot counts them in this.recycled
-    inText: "any part or assembly",
-    outText: "nothing (it removes the part)",
-    canTake: () => true,
-    chargeTime: 0.15,
-    process: (inputs) => {
-      if (inputs.length !== 1) return null;
-      return { outputs: [], left: [] }; // consumed, nothing out
+    output: (inputs) => {
+      const a = inputs.find(isAssembly);
+      const s = inputs.find(isShell);
+      return a && s ? [make.case(a, s)] : null;
     },
   },
 };
 
-// Ports (Phase 1). Sides are local to the machine's rotation:
+function operationHandler(def) {
+  const op = OPS[def.op];
+  const allow = def.allow ? new Set(def.allow) : null;
+  return {
+    needs: op.needs,
+    inText: op.inText,
+    outText: op.outText,
+    chargeTime: def.time,
+    power: def.power || 0,
+    oneEachSide: !!op.oneEachSide,
+    canTake: op.canTake,
+    process: (inputs) => {
+      if (inputs.length !== op.needs) return null;
+      const outputs = op.output(inputs);
+      if (!outputs) return null;
+      if (allow && !outputs.every((o) => allow.has(o))) return null; // recipe hook
+      return { outputs, left: [] };
+    },
+  };
+}
+
+function depotHandler(capacity) {
+  return {
+    needs: 1,
+    inText: `one kind of part (stores up to ${capacity})`,
+    outText: "the same part, sent out the front",
+    buffer: true,
+    capacity,
+    chargeTime: 0,
+    canTake: () => true, // type lock and room are checked by GameRoot
+    process: null,
+  };
+}
+
+export const HANDLERS = {
+  merger: {
+    needs: 1,
+    inText: "any part, from up to three belts",
+    outText: "the same part, on one belt",
+    canTake: (item, held) => held.length === 0,
+    chargeTime: 0,
+    process: (inputs) => (inputs.length === 1 ? { outputs: [inputs[0]], left: [] } : null),
+  },
+  splitter: {
+    needs: 1,
+    inText: "any part",
+    outText: "the same part, sent left or right",
+    canTake: (item, held) => held.length === 0,
+    chargeTime: 0.2,
+    outDirs: [3, 1], // a Y: left exit, then right exit; alternates when both have room
+    process: (inputs) => (inputs.length === 1 ? { outputs: [inputs[0]], left: [] } : null),
+  },
+  recycler: {
+    needs: 1,
+    inText: "any part or assembly",
+    outText: "nothing (it removes the part)",
+    canTake: (item, held) => held.length === 0,
+    chargeTime: 0.15,
+    sink: true,
+    process: (inputs) => (inputs.length === 1 ? { outputs: [], left: [] } : null),
+  },
+  depot_s: depotHandler(50),
+  depot_m: depotHandler(200),
+  depot_l: depotHandler(1000),
+};
+
+export const OPERATION_MACHINES = Object.keys(operations.machines);
+for (const [id, def] of Object.entries(operations.machines)) HANDLERS[id] = operationHandler(def);
+
+export const DEPOTS = ["depot_s", "depot_m", "depot_l"];
+
+// Ports. Sides are local to the machine's rotation:
 //   0 = front (the way it faces), 1 = right, 2 = back, 3 = left.
 // Parts only enter through `in` sides and leave through `out` sides.
-// Splitter out sides match its outDirs (front, then right).
+// The splitter is a Y: in at the back, out left and right.
 export const PORTS = {
-  saw: { in: [2], out: [0] },
+  cutter: { in: [2], out: [0] },
   press: { in: [2], out: [0] },
-  solder: { in: [1, 2, 3], out: [0] },
-  mounter: { in: [1, 2, 3], out: [0] },
-  encap: { in: [1, 2, 3], out: [0] },
+  combiner: { in: [1, 2, 3], out: [0] },
+  encaser: { in: [1, 2, 3], out: [0] },
   merger: { in: [1, 2, 3], out: [0] },
-  splitter: { in: [2], out: [0, 1] },
-  bin: { in: [2], out: [0] },
+  splitter: { in: [2], out: [3, 1] },
   recycler: { in: [0, 1, 2, 3], out: [] },
+  depot_s: { in: [1, 2, 3], out: [0] },
+  depot_m: { in: [1, 2, 3], out: [0] },
+  depot_l: { in: [1, 2, 3], out: [0] },
   dock: { in: [0, 1, 2, 3], out: [] },
+  hopper: { in: [], out: [0] },
 };
 
 /** Local side (0..3) of a machine facing r, for an absolute direction. */
@@ -194,21 +185,20 @@ export function acceptsFrom(type, r, fromDir) {
 export const MACHINE_NAMES = {
   belt: "Conveyor",
   belt_high: "Overhead conveyor",
-  saw: "Saw",
-  press: "Coil press",
-  solder: "Solder station",
-  mounter: "Assembler",
-  encap: "Encapsulation",
   merger: "Merger",
   splitter: "Splitter",
-  bin: "Bin",
   recycler: "Recycler",
+  depot_s: "Small depot",
+  depot_m: "Depot",
+  depot_l: "Large depot",
   dock: "Order dock",
+  hopper: "Hopper",
 };
+for (const [id, def] of Object.entries(operations.machines)) MACHINE_NAMES[id] = def.name;
 
 export class MachineInstance {
   /**
-   * @param {string} type    machine type id (e.g., "saw")
+   * @param {string} type    machine type id (e.g., "cutter")
    * @param {number} x       tile x
    * @param {number} y       tile y
    * @param {number} r       rotation (0-3)
@@ -219,43 +209,31 @@ export class MachineInstance {
     this.y = y;
     this.r = r;
     this.inputs = [];      // item ids in input slots
-    this.buffer = [];      // FIFO storage (bin)
+    this.inputSides = [];  // local side each input came in from
+    this.buffer = [];      // FIFO storage (depots)
     this.outputs = [];     // item ids ready to eject
     this.charge = 0;       // accumulated charge time
     this.outCursor = 0;    // next preferred outDirs slot (splitter alternation)
-    this.upgrades = [];    // machine-level upgrade ids (unused in v1)
   }
 
   get handler() {
     return HANDLERS[this.type];
   }
 
-  get output() {
-    return this.outputs.length ? this.outputs[0] : null;
-  }
-
-  set output(v) {
-    if (v === null) this.outputs = [];
-    else this.outputs = [v];
+  /** What a depot holds (its locked part type), or null when empty. */
+  get stored() {
+    return this.buffer[0] || this.outputs[0] || null;
   }
 
   get isBusy() {
     return this.charge > 0 || this.outputs.length > 0;
   }
 
-  /** Full = output blocked, or bin buffer at capacity. */
-  get isFull() {
-    const h = this.handler;
-    if (this.outputs.length > 0) return true;
-    if (h && h.buffer && h.capacity && this.buffer.length >= h.capacity) return true;
-    return false;
-  }
-
   reset() {
     this.inputs = [];
+    this.inputSides = [];
     this.buffer = [];
     this.outputs = [];
     this.charge = 0;
-    this.outCursor = 0;
   }
 }

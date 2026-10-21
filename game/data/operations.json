@@ -1,0 +1,11 @@
+{
+  "_about": "Operation machines (Phase 2). Open operations: any part can be cut or pressed, any two items combined. 'allow' (optional, per machine) limits a machine to listed output ids, for when real recipes exist. Times are seconds per job. Power is used from Phase 3.",
+  "depthLimit": 4,
+  "shellMaterials": ["m4"],
+  "machines": {
+    "cutter": { "name": "Cutter", "op": "cut", "time": 0.5, "power": 1 },
+    "press": { "name": "Press", "op": "press", "time": 0.5, "power": 1 },
+    "combiner": { "name": "Combiner", "op": "join", "time": 0.8, "power": 2 },
+    "encaser": { "name": "Encaser", "op": "case", "time": 0.8, "power": 2 }
+  }
+}

@@ -95,7 +95,7 @@ test("plan: a dragged belt line builds and forms one line", () => {
 
 test("plan: blocked tiles are marked invalid with a reason, the rest builds", () => {
   const g = sandbox();
-  g.placeMachine("saw", 3, 1, 0);
+  g.placeMachine("cutter", 3, 1, 0);
   const p = new DragPath(1, 1);
   p.moveTo(5, 1);
   const plan = planPlacement(g.world, "belt", p.withDirs(), 0);
@@ -148,7 +148,7 @@ test("plan: machines repeat along a drag", () => {
   const g = sandbox();
   const p = new DragPath(2, 3, 1);
   p.moveTo(2, 6);
-  const plan = planPlacement(g.world, "saw", p.withDirs().map((t) => ({ ...t, r: 0 })), 0);
+  const plan = planPlacement(g.world, "cutter", p.withDirs().map((t) => ({ ...t, r: 0 })), 0);
   applyPlan(g, plan);
   assert.equal(g.machines.size, 4);
 });
@@ -156,14 +156,14 @@ test("plan: machines repeat along a drag", () => {
 test("area delete removes everything in the box except fixed pieces", () => {
   const g = sandbox(12, 8, [{ t: "dock", x: 5, y: 2, r: 0 }]);
   for (let x = 1; x <= 4; x++) g.placeMachine("belt", x, 2, 0);
-  g.placeMachine("saw", 3, 3, 0);
+  g.placeMachine("cutter", 3, 3, 0);
   g.placeMachine("belt_high", 2, 2, 1, 1);
   const pieces = piecesInArea(g.world, 0, 0, 6, 6);
   const ops = removePieces(g, pieces);
   assert.equal(ops.length, 6);
   assert.equal(ops[0].z, 1, "overhead goes first");
   assert.ok(g.world.machineAt(5, 2, 0), "dock stays");
-  assert.equal(g.world.machines.size, 1);
+  assert.equal(g.world.machines.size, 4, "only the 2x2 dock is left");
 });
 
 test("the dock cannot be removed or rotated", () => {
@@ -176,18 +176,18 @@ test("the dock cannot be removed or rotated", () => {
 
 test("rotating a machine in place keeps its parts", () => {
   const g = sandbox();
-  g.placeMachine("solder", 4, 4, 0);
+  g.placeMachine("combiner", 4, 4, 0);
   const m = g.machines.get("4,4");
-  m.inputs.push("silicon_die");
+  m.inputs.push("cut(cut(m1))");
   assert.ok(g.rotateAt(4, 4, 0, 2));
   assert.equal(g.machines.get("4,4"), m);
-  assert.deepEqual(m.inputs, ["silicon_die"]);
+  assert.deepEqual(m.inputs, ["cut(cut(m1))"]);
   assert.equal(m.r, 2);
   assert.equal(g.world.machineAt(4, 4).r, 2);
 });
 
 test("rotating a belt in place keeps the parts on it", () => {
-  const g = new GameRoot({ id: "t", zone: { w: 12, h: 8 }, fixed: [{ t: "hopper_ingot", x: 0, y: 2, r: 0 }] });
+  const g = new GameRoot({ id: "t", zone: { w: 12, h: 8 }, fixed: [{ t: "hopper", item: "m1", x: 0, y: 2, r: 0 }] });
   for (let x = 1; x <= 6; x++) g.placeMachine("belt", x, 2, 0);
   for (let i = 0; i < 90; i++) g.tick();
   const before = g.itemCount();
@@ -210,8 +210,8 @@ test("a blocked rotation puts the belt back", () => {
 
 test("removing a machine counts the parts it held (ledger stays exact)", () => {
   const g = sandbox();
-  g.placeMachine("solder", 4, 4, 0);
-  g.machines.get("4,4").inputs.push("silicon_die");
+  g.placeMachine("combiner", 4, 4, 0);
+  g.machines.get("4,4").inputs.push("cut(cut(m1))");
   g.removeMachine(4, 4, 0);
   assert.equal(g.partsRemoved, 1);
 });
@@ -238,7 +238,7 @@ test("undo/redo: area delete and rotation round trip to the same layout", () => 
   p.moveTo(5, 1);
   p.moveTo(5, 4);
   h.push(applyPlan(g, planPlacement(g.world, "belt", p.withDirs(), 0)));
-  h.push(applyPlan(g, planPlacement(g.world, "saw", [{ x: 2, y: 5, r: 0 }], 0)));
+  h.push(applyPlan(g, planPlacement(g.world, "cutter", [{ x: 2, y: 5, r: 0 }], 0)));
   g.rotateAt(2, 5, 0, 3);
   h.push([{ k: "rotate", x: 2, y: 5, z: 0, from: 0, to: 3 }]);
   const built = layout(g);
@@ -258,11 +258,11 @@ test("undo/redo: area delete and rotation round trip to the same layout", () => 
 test("undo/redo: a new action clears redo; stack keeps at least 50 steps", () => {
   const g = sandbox(80, 4);
   const h = new History(g);
-  for (let x = 0; x < 60; x++) h.push(applyPlan(g, planPlacement(g.world, "saw", [{ x, y: 0, r: 0 }], 0)));
+  for (let x = 0; x < 60; x++) h.push(applyPlan(g, planPlacement(g.world, "cutter", [{ x, y: 0, r: 0 }], 0)));
   for (let i = 0; i < 55; i++) assert.ok(h.undo(), `undo ${i}`);
   assert.equal(g.machines.size, 5);
   assert.ok(h.canRedo);
-  h.push(applyPlan(g, planPlacement(g.world, "saw", [{ x: 70, y: 2, r: 0 }], 0)));
+  h.push(applyPlan(g, planPlacement(g.world, "cutter", [{ x: 70, y: 2, r: 0 }], 0)));
   assert.equal(h.canRedo, false);
 });
 
@@ -272,22 +272,22 @@ import { acceptsFrom, PORTS } from "../src/game/systems/process.js";
 
 test("ports: local sides follow rotation", () => {
   // saw facing right (r=0) takes from the left (absolute dir 2 = back)
-  assert.equal(acceptsFrom("saw", 0, 2), true);
-  assert.equal(acceptsFrom("saw", 0, 1), false);
+  assert.equal(acceptsFrom("cutter", 0, 2), true);
+  assert.equal(acceptsFrom("cutter", 0, 1), false);
   // saw facing down (r=1): back is up (absolute dir 3)
-  assert.equal(acceptsFrom("saw", 1, 3), true);
-  assert.equal(acceptsFrom("saw", 1, 2), false);
+  assert.equal(acceptsFrom("cutter", 1, 3), true);
+  assert.equal(acceptsFrom("cutter", 1, 2), false);
   // 2-input stations never take from the front
-  assert.equal(acceptsFrom("solder", 0, 0), false);
-  for (const d of [1, 2, 3]) assert.equal(acceptsFrom("solder", 0, d), true);
-  assert.deepEqual(PORTS.splitter.out, [0, 1]);
+  assert.equal(acceptsFrom("combiner", 0, 0), false);
+  for (const d of [1, 2, 3]) assert.equal(acceptsFrom("combiner", 0, d), true);
+  assert.deepEqual(PORTS.splitter.out, [3, 1], "the splitter is a Y: left and right");
 });
 
 function feedRun(beltDir, sawR) {
   // hopper at (0,2) -> belts -> saw at (4,2); last belt points at the saw
-  const g = new GameRoot({ id: "p", zone: { w: 10, h: 6 }, fixed: [{ t: "hopper_ingot", x: 0, y: 2, r: 0 }] });
+  const g = new GameRoot({ id: "p", zone: { w: 10, h: 6 }, fixed: [{ t: "hopper", item: "m1", x: 0, y: 2, r: 0 }] });
   for (let x = 1; x <= 3; x++) g.placeMachine("belt", x, 2, beltDir);
-  g.placeMachine("saw", 4, 2, sawR);
+  g.placeMachine("cutter", 4, 2, sawR);
   g.placeMachine("recycler", 5, 2, 0);
   for (let i = 0; i < 300; i++) g.tick();
   return g;
@@ -305,10 +305,10 @@ test("ports: a belt into the saw's back works, into its side waits", () => {
 
 test("ports: machine to machine respects the next machine's input side", () => {
   const make = (sawR) => {
-    const g = new GameRoot({ id: "p", zone: { w: 10, h: 6 }, fixed: [{ t: "hopper_ingot", x: 0, y: 2, r: 0 }] });
+    const g = new GameRoot({ id: "p", zone: { w: 10, h: 6 }, fixed: [{ t: "hopper", item: "m1", x: 0, y: 2, r: 0 }] });
     g.placeMachine("belt", 1, 2, 0);
-    g.placeMachine("saw", 2, 2, 0); // ingot -> wafers, out to the right
-    g.placeMachine("saw", 3, 2, sawR); // wafer -> dies
+    g.placeMachine("cutter", 2, 2, 0); // ingot -> wafers, out to the right
+    g.placeMachine("cutter", 3, 2, sawR); // wafer -> dies
     g.placeMachine("recycler", 4, 2, 0);
     g.placeMachine("recycler", 3, 3, 0);
     g.placeMachine("recycler", 3, 1, 0);
@@ -325,10 +325,10 @@ test("plan: a machine dropped on a belt is inserted into the line (one undo step
   const g = sandbox();
   for (let x = 1; x <= 5; x++) g.placeMachine("belt", x, 2, 0);
   const h = new History(g);
-  const plan = planPlacement(g.world, "saw", [{ x: 3, y: 2, r: 0 }], 0);
+  const plan = planPlacement(g.world, "cutter", [{ x: 3, y: 2, r: 0 }], 0);
   assert.equal(plan[0].action, "swap");
   h.push(applyPlan(g, plan));
-  assert.equal(g.world.machineAt(3, 2).t, "saw");
+  assert.equal(g.world.machineAt(3, 2).t, "cutter");
   assert.equal(g.world.lines.allLines().length, 2, "the line splits around the saw");
   h.undo();
   assert.equal(g.world.machineAt(3, 2).t, "belt");

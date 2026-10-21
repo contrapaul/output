@@ -1,0 +1,10 @@
+{
+  "_about": "Name layer: give any item id a real name. Ids not listed here get a generated label (for example 'M1 half'). Raw material colors and patterns live in materials.",
+  "materials": {
+    "m1": { "label": "M1", "color": "#7f97b2", "pattern": "none" },
+    "m2": { "label": "M2", "color": "#d4884a", "pattern": "stripes" },
+    "m3": { "label": "M3", "color": "#5a9e6f", "pattern": "dots" },
+    "m4": { "label": "M4", "color": "#d1b84a", "pattern": "cross" }
+  },
+  "names": {}
+}

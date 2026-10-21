@@ -1,0 +1,35 @@
+{
+  "_about": "The factory plot. Stage 0 is the start; each milestone contract moves to the next stage. Zones only grow. Hoppers are fixed and never run out; r is the side they push out of (0 right, 1 down, 2 left, 3 up). The dock is 2x2 (top-left tile).",
+  "dock": { "x": 13, "y": 5 },
+  "stages": [
+    {
+      "zone": { "x": 0, "y": 0, "w": 16, "h": 12 },
+      "hoppers": [
+        { "x": 1, "y": 3, "r": 0, "item": "m1" },
+        { "x": 1, "y": 8, "r": 0, "item": "m2" }
+      ]
+    },
+    {
+      "zone": { "x": -6, "y": -4, "w": 30, "h": 20 },
+      "hoppers": [
+        { "x": -4, "y": 1, "r": 0, "item": "m3" },
+        { "x": 8, "y": -3, "r": 1, "item": "m1" }
+      ]
+    },
+    {
+      "zone": { "x": -12, "y": -8, "w": 42, "h": 28 },
+      "hoppers": [
+        { "x": -10, "y": 6, "r": 0, "item": "m4" },
+        { "x": 26, "y": 10, "r": 2, "item": "m2" },
+        { "x": 8, "y": 18, "r": 3, "item": "m3" }
+      ]
+    },
+    {
+      "zone": { "x": -16, "y": -10, "w": 50, "h": 34 },
+      "hoppers": [
+        { "x": 30, "y": -8, "r": 1, "item": "m4" },
+        { "x": -14, "y": 20, "r": 0, "item": "m1" }
+      ]
+    }
+  ]
+}
