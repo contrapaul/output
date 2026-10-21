@@ -19,6 +19,7 @@ This plan is written for two readers:
 - **Phase 1 (building feels good) is done** (gate passed 2026-10-21).
 - **Phase 2 (one growing factory) is built** and waiting for the human gate (see `STATUS.md`).
 - **Phase 3 (power and rewards) is built** and waiting for the human gate (see `STATUS.md`).
+- **Phase 4 (scale) is built** and waiting for the human gate (see `STATUS.md`).
 
 **Still wrong by design (fixed in Phases 1 and 2):**
 

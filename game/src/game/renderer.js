@@ -514,11 +514,13 @@ export class Renderer {
       const bw = s * 0.76;
       ctx.fillStyle = "rgba(0,0,0,0.3)";
       ctx.fillRect(px + s * 0.12, py + s * 0.74, bw, s * 0.08);
+      const frac = main.rate ? main.held / main.rate.seconds : main.accepted / main.amount;
       ctx.fillStyle = "#7fd39a";
-      ctx.fillRect(px + s * 0.12, py + s * 0.74, bw * Math.min(main.accepted / main.amount, 1), s * 0.08);
+      ctx.fillRect(px + s * 0.12, py + s * 0.74, bw * Math.min(frac, 1), s * 0.08);
       ctx.fillStyle = "#fff";
       ctx.font = `bold ${tile * 0.28}px system-ui`;
-      ctx.fillText(`${main.accepted}/${main.amount}`, px + s / 2, py + s * 0.9);
+      const label = main.rate ? `${dock.ratePerMinute(main)}/${main.rate.perMinute} a min` : `${main.accepted}/${main.amount}`;
+      ctx.fillText(label, px + s / 2, py + s * 0.9);
     } else {
       ctx.font = `bold ${tile * 0.3}px system-ui`;
       ctx.fillText("Dock", px + s / 2, py + s / 2);

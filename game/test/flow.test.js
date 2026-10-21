@@ -182,3 +182,27 @@ test("conservation: items in = items out (no creation/destruction)", () => {
   assert.equal(dock.main.accepted, 10);
   assert.equal(flow.count(), 0);
 });
+
+// ---- Phase 4 fix: every item moves each tick ---------------------------------
+
+test("every item on a busy belt moves each tick (not just the front one)", () => {
+  const flow = new FlowLine(makeLine(straight(10)), null);
+  flow.accept("m1", 0);
+  flow.accept("m1", 1);
+  flow.accept("m1", 2);
+  const v = CONFIG.BELT_RATE / 30;
+  flow.step(v, () => false);
+  assert.deepEqual(flow.items.map((i) => +i.d.toFixed(6)), [0, 1, 2].map((d) => +(d + v).toFixed(6)));
+});
+
+test("a long belt carries parts at the belt's full capacity", () => {
+  const flow = new FlowLine(makeLine(straight(12)), null);
+  let out = 0;
+  const v = CONFIG.BELT_RATE / 30;
+  for (let t = 0; t < 30 * 60; t++) {
+    flow.accept("m1", 0); // feed as fast as spacing allows
+    out += flow.step(v, () => true).length;
+  }
+  const capacity = (CONFIG.BELT_RATE / CONFIG.MIN_SPACING) * 60; // parts a minute
+  assert.ok(out > capacity * 0.85, `${out} a minute out, belt capacity about ${Math.round(capacity)}`);
+});

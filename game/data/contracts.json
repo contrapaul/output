@@ -1,5 +1,5 @@
 {
-  "_about": "Placeholder contracts (Phase 2) using abstract items. Paul replaces these with the real progression. Fields: item (canonical id), amount, creditEach (credits per part delivered), unlock (machine ids added to the toolbar when this contract is done), milestone (true: the plot grows to the next stage in plot.json and the camera pulls out). Phase 3: cityPower (the city's power cap from this contract on; before any contract sets it, the city covers all demand), gift (free builds, for example {\"solar\": 2}), perks (fixed perk ids for this milestone's level-up card; otherwise smart offers), supplyDrop ({ item, amount } for the supply drop perk).",
+  "_about": "Placeholder contracts (Phase 2) using abstract items. Paul replaces these with the real progression. Fields: item (canonical id), amount, creditEach (credits per part delivered), unlock (machine ids added to the toolbar when this contract is done), milestone (true: the plot grows to the next stage in plot.json and the camera pulls out). Phase 3: cityPower (the city's power cap from this contract on; before any contract sets it, the city covers all demand), gift (free builds, for example {\"solar\": 2}), perks (fixed perk ids for this milestone's level-up card; otherwise smart offers), supplyDrop ({ item, amount } for the supply drop perk). Phase 4: rate ({ perMinute, minutes }) makes a standing order: keep that many parts per minute arriving for that long (no amount).",
   "start": {
     "unlocked": [
       "belt"
@@ -87,14 +87,17 @@
     },
     {
       "id": "c08",
-      "title": "Fine work",
-      "brief": "Deliver 15 M1 quarter + pressed M2.",
+      "title": "Fine work (steady)",
+      "brief": "Keep 6 M1 quarter + pressed M2 a minute arriving for 2 minutes.",
       "item": "join(cut(cut(m1))|press(m2))",
-      "amount": 15,
       "creditEach": 4,
       "unlock": [
         "depot_m"
-      ]
+      ],
+      "rate": {
+        "perMinute": 6,
+        "minutes": 2
+      }
     },
     {
       "id": "c09",
@@ -143,11 +146,14 @@
     },
     {
       "id": "c13",
-      "title": "Half shell",
-      "brief": "Deliver 15 (M1 quarter + pressed M2) in M4 half shell.",
+      "title": "Half shell (steady)",
+      "brief": "Keep 6 (M1 quarter + pressed M2) in M4 half shell a minute arriving for 2 minutes.",
       "item": "case(join(cut(cut(m1))|press(m2))|cut(m4))",
-      "amount": 15,
-      "creditEach": 5
+      "creditEach": 5,
+      "rate": {
+        "perMinute": 6,
+        "minutes": 2
+      }
     },
     {
       "id": "c14",

@@ -168,6 +168,8 @@ test("campaign: contracts arrive on their own, unlock tools, and the plot grows"
   const c = new Campaign();
   const g = c.game;
   const events = [];
+  let sideCredits = 0;
+  g.signals.on("itemAccepted", (e) => { if (e.slot.kind === "side") sideCredits += e.gain; });
   g.signals.on("contractComplete", (e) => events.push(e.contract.id));
   g.signals.on("expanded", (e) => events.push(`stage${e.stage}`));
   assert.deepEqual(c.tools(), ["belt"]);
@@ -208,7 +210,7 @@ test("campaign: contracts arrive on their own, unlock tools, and the plot grows"
   assert.ok(g.ledgerOk(), "no part created or lost across the whole run");
   assert.ok(g.dock.leftoversTaken > 0, "old parts drained into the dock");
   const paid = CONTRACTS.slice(0, 6).reduce((n, k) => n + k.amount * k.creditEach, 0);
-  assert.equal(g.coins, paid, "leftovers paid nothing");
+  assert.equal(g.coins, paid + sideCredits, "leftovers paid nothing (side orders pay extra)");
 });
 
 test("dock leftovers: earlier contracts' parts are taken free, no progress, no credits", () => {
@@ -277,7 +279,7 @@ test("contracts: valid items, known tools, reachable with what is unlocked by th
     assert.ok(!ids.has(c.id), `duplicate id ${c.id}`);
     ids.add(c.id);
     assert.ok(itemExists(c.item), `${c.id}: unknown item ${c.item}`);
-    assert.ok(c.amount > 0 && Number.isFinite(c.creditEach), `${c.id}: amount and credits`);
+    assert.ok((c.amount > 0 || (c.rate?.perMinute > 0 && c.rate?.minutes > 0)) && Number.isFinite(c.creditEach), `${c.id}: amount (or rate) and credits`);
     assert.ok(!/—/.test(c.title + c.brief), `${c.id}: no em dashes`);
     const raws = new Set(STAGES.slice(0, stage + 1).flatMap((s) => s.hoppers.map((h) => h.item)));
     for (const n of needs(c.item)) {

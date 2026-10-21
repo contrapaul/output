@@ -58,7 +58,7 @@ export class SaveSystem {
       const tiles = fl.line.tiles;
       for (const it of fl.items) {
         const i = Math.min(Math.floor(it.d), tiles.length - 1);
-        items.push({ k: tiles[i].key, f: +(it.d - i).toFixed(4), i: it.item });
+        items.push({ k: tiles[i].key, f: it.d - i, i: it.item });
       }
     }
     const ledger = {};
@@ -72,6 +72,10 @@ export class SaveSystem {
       items,
       ledger,
       placedCount: game.placedCount,
+      time: game.time,
+      hoppers: game.hoppers.map((h) => h.cooldown),
+      upgrades: game.upgradeLevels,
+      boosts: game.boostUntil,
       settings: game.settings,
       stats: game.stats,
     };
@@ -109,6 +113,10 @@ export class SaveSystem {
     for (const fl of game.flowLines.values()) fl.items.sort((a, b) => a.d - b.d);
     for (const k of LEDGER) if (data.ledger && typeof data.ledger[k] === "number") game[k] = data.ledger[k];
     game.placedCount = data.placedCount || 0;
+    game.time = data.time || 0;
+    (data.hoppers || []).forEach((cd, i) => { if (game.hoppers[i]) game.hoppers[i].cooldown = cd; });
+    Object.assign(game.upgradeLevels, data.upgrades || {});
+    game.boostUntil = { ...(data.boosts || {}) };
     game.stats = Object.assign({ timePlayedSec: 0, machinesBuilt: 0 }, data.stats || {});
     return campaign;
   }

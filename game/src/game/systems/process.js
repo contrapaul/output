@@ -217,6 +217,7 @@ export class MachineInstance {
     this.outputs = [];     // item ids ready to eject
     this.charge = 0;       // accumulated charge time
     this.outCursor = 0;    // next preferred outDirs slot (splitter alternation)
+    this.jobTimes = [];    // game times of recent finished jobs (rates)
   }
 
   get handler() {

@@ -34,7 +34,8 @@ import { OrderDock } from "./systems/dock.js";
 import { Signals } from "../core/signals.js";
 import { DIRS, tileKey } from "../core/grid.js";
 import { itemName, material } from "./items.js";
-import { power as powerData } from "../data/index.js";
+import { power as powerData, upgrades as upgradeData } from "../data/index.js";
+import { RateTracker } from "./systems/rates.js";
 
 const HOPPER_RATE = 0.5; // parts per second
 export const GENERATORS = powerData.generators;
@@ -77,6 +78,10 @@ export class GameRoot {
       calmWinds: false,
     };
     this.cutJobs = 0;
+    this.upgradeLevels = Object.fromEntries(Object.keys(upgradeData.tracks).map((k) => [k, 0]));
+    this.boostUntil = {}; // boost id -> game time it ends
+    this.rates = new RateTracker();
+    this.tickHooks = []; // called after every tick (campaign side orders)
 
     // ledger
     this.emitted = 0;
@@ -295,9 +300,64 @@ export class GameRoot {
     return null;
   }
 
-  /** Effective storage of a depot (perks can raise it). */
+  /** Effective storage of a depot (perks and upgrades raise it). */
   capacityOf(m) {
-    return Math.floor(m.handler.capacity * this.mods.depotMult);
+    return Math.floor(m.handler.capacity * this.mods.depotMult * this.upgradeMult("depots"));
+  }
+
+  // ---- upgrades and boosts ----------------------------------------------------
+
+  upgradeMult(track) {
+    const lvl = this.upgradeLevels[track] || 0;
+    return lvl ? upgradeData.tracks[track].levels[lvl - 1].mult : 1;
+  }
+
+  /** The next level of a track, or null when it is maxed out. */
+  nextUpgrade(track) {
+    return upgradeData.tracks[track]?.levels[this.upgradeLevels[track] || 0] || null;
+  }
+
+  /** Buy the next level of a track. Returns null on success, or a reason. */
+  buyUpgrade(track) {
+    const next = this.nextUpgrade(track);
+    if (!next) return "already at the top level";
+    if (this.coins < next.price) return `needs ${next.price} credits`;
+    this.coins -= next.price;
+    this.upgradeLevels[track]++;
+    this.signals.emit("upgradeBought", { track, level: this.upgradeLevels[track], name: next.name });
+    return null;
+  }
+
+  /** Seconds a boost has left (0 when not running). */
+  boostLeft(id) {
+    return Math.max(0, (this.boostUntil[id] || 0) - this.time);
+  }
+
+  /** Use a boost: pay, and run it (or add time if it is already running). */
+  buyBoost(id) {
+    const b = upgradeData.boosts[id];
+    if (!b) return "unknown boost";
+    if (this.coins < b.price) return `needs ${b.price} credits`;
+    this.coins -= b.price;
+    this.boostUntil[id] = Math.max(this.boostUntil[id] || 0, this.time) + b.seconds;
+    this.signals.emit("boostUsed", { id, seconds: this.boostLeft(id) });
+    return null;
+  }
+
+  /** Combined running-boost multiplier for "machines" or "hoppers". */
+  boostMult(kind) {
+    let m = 1;
+    for (const [id, b] of Object.entries(upgradeData.boosts)) {
+      if (b[kind] && this.boostLeft(id) > 0) m *= b[kind];
+    }
+    return m;
+  }
+
+  /** Recent jobs per minute for one machine (last 60 s of game time). */
+  jobsPerMinute(m) {
+    const since = this.time - 60;
+    while (m.jobTimes.length && m.jobTimes[0] < since) m.jobTimes.shift();
+    return (m.jobTimes.length * 60) / Math.max(1, Math.min(60, this.time));
   }
 
   /**
@@ -375,7 +435,10 @@ export class GameRoot {
     this._tickHoppers(dt);
     this._tickLines(dt);
     this._tickMachines(dt);
-    if (this.dock) this.dock.tick();
+    if (this.dock) {
+      for (const slot of this.dock.tick(this.time, dt)) this.signals.emit("orderFilled", { slot });
+    }
+    for (const hook of this.tickHooks) hook(dt);
   }
 
   _tickHoppers(dt) {
@@ -384,13 +447,14 @@ export class GameRoot {
       if (h.cooldown > 0) continue;
       if (this._ejectToDir({ x: h.x, y: h.y, r: h.dir }, 0, h.item)) {
         this.emitted++;
+        this.rates.add(`made:${h.item}`, this.time);
         h.cooldown = 1 / this.hopperRate(h);
       }
     }
   }
 
   hopperRate(h) {
-    return h.rate * (this.mods.hopperMult[material(h.item)] || 1);
+    return h.rate * (this.mods.hopperMult[material(h.item)] || 1) * this.upgradeMult("hoppers") * this.boostMult("hoppers");
   }
 
   /**
@@ -471,16 +535,25 @@ export class GameRoot {
     const slot = this.dock.tryAccept(item);
     if (!slot) return false;
     this.delivered++;
+    this.rates.add(`delivered:${item}`, this.time);
     if (slot.kind === "leftover") return true; // free: no credits, no progress
     const gain = (slot.creditEach || 0) * this.mods.creditMult;
     this.coins += gain;
     this.signals.emit("itemAccepted", { item, slot, gain });
-    if (slot.accepted >= slot.amount) this.signals.emit("orderFilled", { slot });
+    if (!slot.rate && slot.accepted >= slot.amount) this.signals.emit("orderFilled", { slot });
     return true;
   }
 
+  beltSpeedMult() {
+    return this.mods.beltMult * this.upgradeMult("belts");
+  }
+
+  machineSpeedMult(type) {
+    return this.speedMult * (this.mods.typeSpeed[type] || 1) * this.upgradeMult("machines") * this.boostMult("machines");
+  }
+
   _tickLines(dt) {
-    const velocity = CONFIG.BELT_RATE * this.mods.beltMult * dt;
+    const velocity = CONFIG.BELT_RATE * this.beltSpeedMult() * dt;
     for (const flowLine of this.flowLines.values()) {
       const canEject = (item) => this._canTake(flowLine, item);
       const ejected = flowLine.step(velocity, canEject);
@@ -507,7 +580,7 @@ export class GameRoot {
 
       const needed = h.needs || 1;
       if (m.outputs.length === 0 && m.inputs.length >= needed) {
-        m.charge += dt * this.speedMult * (this.mods.typeSpeed[m.type] || 1);
+        m.charge += dt * this.machineSpeedMult(m.type);
         if (m.charge >= h.chargeTime) {
           const res = h.process(m.inputs);
           if (res && m.type === "cutter") {
@@ -520,6 +593,8 @@ export class GameRoot {
             if (h.sink) this.recycled += used;
             else if (res.outputs.length > used) this.made += res.outputs.length - used;
             else if (res.outputs.length < used) this.merged += used - res.outputs.length;
+            m.jobTimes.push(this.time);
+            for (const o of res.outputs) this.rates.add(`made:${o}`, this.time);
             m.outputs = res.outputs;
             m.inputs = res.left;
             m.inputSides = m.inputSides.slice(m.inputSides.length - res.left.length);

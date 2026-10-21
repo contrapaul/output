@@ -128,7 +128,8 @@ test("city cap: the contract sets it, unlocks solar and wind, and gives free pan
 test("dead-end guard: after the cap, the player can always get more power", () => {
   const capIdx = CONTRACTS.findIndex((c) => typeof c.cityPower === "number");
   // credits earned up to and including the cap contract, plus its gift
-  const earned = CONTRACTS.slice(0, capIdx + 1).reduce((n, c) => n + c.amount * c.creditEach, 0);
+  const parts = (c) => c.amount ?? c.rate.perMinute * c.rate.minutes;
+  const earned = CONTRACTS.slice(0, capIdx + 1).reduce((n, c) => n + parts(c) * c.creditEach, 0);
   const gift = CONTRACTS[capIdx].gift?.solar || 0;
   assert.ok(gift * GENERATORS.solar.output + Math.floor(earned / GENERATORS.solar.price) * GENERATORS.solar.output >= 4,
     "free panels plus earned credits cover at least two more machines");

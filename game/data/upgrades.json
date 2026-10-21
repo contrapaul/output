@@ -1,0 +1,29 @@
+{
+  "_about": "Phase 4. Upgrades are bought with credits and apply to the whole factory (like shapez). Each track has levels in order; 'mult' is the total multiplier at that level (it stacks with perks). Boosts are one-use and last 'seconds'. Side orders appear in a free dock slot every 'everySeconds', stay 'expireSeconds', ask for something the player has made before, and pay 'creditBonus' times the usual credits. They never count toward level-ups.",
+  "tracks": {
+    "belts": { "name": "Conveyor", "what": "Belts move faster.", "levels": [
+      { "name": "Conveyor Mk2", "price": 30, "mult": 1.5 },
+      { "name": "Conveyor Mk3", "price": 150, "mult": 2 },
+      { "name": "Conveyor Mk4", "price": 400, "mult": 3 }
+    ] },
+    "machines": { "name": "Machine motors", "what": "Machines work faster.", "levels": [
+      { "name": "Motors Mk2", "price": 50, "mult": 1.25 },
+      { "name": "Motors Mk3", "price": 180, "mult": 1.5 },
+      { "name": "Motors Mk4", "price": 450, "mult": 2 }
+    ] },
+    "hoppers": { "name": "Hoppers", "what": "Hoppers give parts faster.", "levels": [
+      { "name": "Hoppers Mk2", "price": 40, "mult": 1.5 },
+      { "name": "Hoppers Mk3", "price": 160, "mult": 2 },
+      { "name": "Hoppers Mk4", "price": 420, "mult": 3 }
+    ] },
+    "depots": { "name": "Depots", "what": "Depots hold more.", "levels": [
+      { "name": "Depots Mk2", "price": 40, "mult": 1.5 },
+      { "name": "Depots Mk3", "price": 140, "mult": 2 }
+    ] }
+  },
+  "boosts": {
+    "overdrive": { "name": "Overdrive", "what": "All machines work twice as fast for 60 seconds.", "price": 30, "seconds": 60, "machines": 2 },
+    "rush": { "name": "Rush", "what": "All hoppers give parts twice as fast for 60 seconds.", "price": 25, "seconds": 60, "hoppers": 2 }
+  },
+  "sideOrders": { "everySeconds": 150, "expireSeconds": 300, "creditBonus": 1.5, "minAmount": 5, "maxAmount": 15 }
+}

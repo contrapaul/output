@@ -7,10 +7,10 @@
 // Per tick (30 Hz):
 //   1. Hoppers try to emit at their belt tile (any distance along the line)
 //      if the local spacing allows it.
-//   2. Advance items from the TAIL forward, each clamped by min spacing
-//      (0.63 tile) to the item ahead. Shared velocity: the total velocity
-//      available this tick is beltRate * dt; each item consumes what it
-//      needs, the rest carries forward to the next item.
+//   2. Advance items from the TAIL forward: each moves up to beltRate * dt,
+//      clamped by min spacing (0.63 tile) to the item ahead. (Phase 4 fix:
+//      the velocity used to be shared, so on a busy belt only one item
+//      moved per tick.)
 //   3. If the tail item passes the line's end (distance >= line.length - 1)
 //      and the next acceptor can take THAT item, eject it.
 //
@@ -97,51 +97,25 @@ export class FlowLine {
    * @returns {string[]}  itemIds ejected (in order, first = furthest)
    */
   step(velocity, canEject) {
-    velocity += this.velCarry;
-    this.velCarry = 0;
     // remember where each item was, so the renderer can draw between ticks
     for (const it of this.items) it.pd = it.d;
     const ejected = [];
     const exitD = this.length - 1; // items exit when they reach the last tile
 
+    // Every item moves up to the full velocity, front first, and stops
+    // MIN_SPACING behind the item ahead (after that item has moved). Only
+    // the frontmost item can leave the line, and only when the acceptor can
+    // take that part; then the next one becomes the front.
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       const ahead = i + 1 < this.items.length ? this.items[i + 1].d : Infinity;
-      let move = velocity;
-      const maxBySpacing = ahead - MIN_SPACING - it.d;
-      if (maxBySpacing < move) move = maxBySpacing;
-
-      const maxByExit = exitD - it.d;
-      if (maxByExit < move) move = maxByExit;
-
-      if (move <= 0) {
-        if (it.d >= exitD - 0.001 && canEject(it.item)) {
-          this.items.splice(i, 1);
-          ejected.push(it.item);
-        }
-        if (i === this.items.length - 1) {
-          this.velCarry = velocity;
-        }
-        continue;
-      }
-
-      it.d += move;
-      velocity -= move;
-      if (velocity <= 0) break;
-
-      if (it.d >= exitD - 0.001) {
-        if (canEject(it.item)) {
-          this.items.splice(i, 1);
-          ejected.push(it.item);
-        } else {
-          it.d = exitD;
-          this.velCarry = velocity;
-          velocity = 0;
-          break;
-        }
+      const target = Math.min(it.d + velocity, ahead - MIN_SPACING, exitD);
+      if (target > it.d) it.d = target;
+      if (i === this.items.length - 1 && it.d >= exitD - 0.001 && canEject(it.item)) {
+        this.items.splice(i, 1);
+        ejected.push(it.item);
       }
     }
-
     return ejected;
   }
 
