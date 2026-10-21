@@ -24,5 +24,5 @@ Read `roadmap.md` (v3, updated 2026-10-21) before starting. Paul answered decisi
 - 2026-10-21 (Claude, planning only, no game code changed): roadmap v3 written from Paul's decisions; Cloudflare deploy fixed (`wrangler.jsonc`); this file reset for Phase 1.
 
 ## Questions for Paul
-- Q1 and Q2 in roadmap section 3 (needed before Phases 2 and 3, not Phase 1).
-- Power and rewards design in `docs/power-and-rewards.md` (needed before Phase 3).
+- None blocking Phase 1 or Phase 2. Phase 2 decisions are recorded in roadmap section 3 (D1 to D9, R1 to R6).
+- Before Phase 3: `docs/power-and-rewards.md` section 7 (city power cap moment, perk pool, supply drop items).

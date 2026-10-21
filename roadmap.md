@@ -76,6 +76,22 @@ Paul's words, kept as written:
 
 ### Open questions (new)
 
+Answers: 
+Q1: Operations are open- and once we have a list of the total set of parts and combinations we'll work out recipes.
+Q2: We can add dynamic orders that are time-gated to allow for output of stored items or shuffling production to earn extra credits that won't contribute to leveling up. This will keep the game fun.
+Q3: Updated.
+
+### Decisions round 2 (Paul, 2026-10-21, before Phase 2)
+
+| # | Decision | Effect on the plan |
+|---|---|---|
+| R1 | Operations are open (Q1). Phase 2 builds **Cut, Press, Combine, Encase**. Cut and Press work on single parts only, not assemblies. | Phase 2 task 1. Recipes come later, once Paul has the full set of parts. |
+| R2 | Side orders (Q2) share **one dock with several slots**: the main contract plus 1 or 2 side orders. | Phase 2 builds the slots. Side orders themselves arrive in Phase 4. |
+| R3 | Side orders **appear on a timer and expire gently** (for example a new one every few minutes, gone after about 5 minutes if not filled). No penalty. They pay credits only and never count toward level-ups. | Phase 4 task 2. |
+| R4 | A **supply drop** is a full container placed on an open tile. When empty it **becomes a normal depot** the player keeps. | Phase 2 builds depots that can start pre-filled. Phase 3 delivers them as a perk. |
+| R5 | Normal hoppers never run out. They have a base rate that upgrades and perks can raise. There are no limited hoppers. | Phase 3 (perks) and Phase 4 (upgrades). |
+| R6 | Power story: the city supplies power until a milestone where "we've maxed out what the city will give us". Before that, power shows in the UI but never blocks anything. | Phase 3. Phase 2 does not build power. |
+
 | # | Question | Recommendation | Needed by |
 |---|---|---|---|
 | Q1 | Should the operations be open (any part can be cut, pressed or joined, like shapez) or limited to a recipe list (like Satisfactory)? | Build the engine open, with an optional recipe list that limits which operations each machine allows. Paul chooses per machine when writing content. | Phase 2 |
@@ -120,17 +136,23 @@ Goal: the structural change. One plot that grows, contracts that arrive on their
 Read first: shapez `hub_goals.js`, `modes/regular.js` (goal list with growing amounts and rewards), `hud/parts/unlock_notification.js`, `hud/parts/pinned_shapes.js`, `game/map_chunk_view.js` (drawing only what is visible).
 
 Tasks:
-1. **Abstract items and operations (D5, Q1).** Raw materials `m1` to `m4`, each with a color. Machines are operations: *modify* (one in, changes form, for example `cut(m1)`), *split* (one in, two out), *combine* (two in, one assembly, for example `join(a|b)`), *encase* (assembly into a shell). Item ids stay canonical strings. A `data/items.json` name layer can give any id a real name and art later; ids without a name show a generated label (for example "M1, cut twice").
-2. **Recipes as data** in `data/recipes.json`. Each machine either allows any input (open) or only listed recipes (limited), per Q1. Remove the hard-coded handlers for each item.
+1. **Abstract items and open operations (D5, R1).** Raw materials `m1` to `m4`, each with a color. Four operation machines:
+   - **Cutter:** one part in, two halves out (`cut(m1)`). Parts only, not assemblies.
+   - **Press:** one part in, one reshaped part out (`press(m1)`). Parts only, not assemblies.
+   - **Combiner:** any two items in, one assembly out (`join(a|b)`, children sorted as today).
+   - **Encaser:** one assembly plus one shell part in, one product out (`case(assembly|shell)`). Which parts count as shells is a list in data.
+
+   Item ids stay canonical strings. A `data/items.json` name layer can give any id a real name and art later; ids without a name show a generated label (for example "M1, cut twice"). Set a depth limit in config (for example 4 levels) so the item space stays testable.
+2. **Operations in data.** `data/operations.json` describes each operation (inputs, rule, time, power cost for later). Remove the hard-coded handlers for each item. Leave a hook for an optional recipe list per machine, but do not build recipes yet (R1).
 3. **Icons from the recipe tree (D8).** One drawing function builds any item from its tree: material color plus form shape for parts, nested layout for assemblies. Two levels of detail: belt size (simple silhouette plus color) and order size (full tree visible). Test page `?art=1` shows every item at both sizes.
 4. **Contracts as data** in `data/contracts.json`: `{ id, title, brief, requires: { item, amount }, credits, unlock?, milestone? }`. Ordered list. Validate on load. Ship about 15 placeholder contracts using abstract items, enough to test the loop. Paul replaces them later (D4).
-5. **Order Dock.** A fixed 2x2 building that accepts only the current contract's item (D9). The dock panel always shows the current contract (large icon from task 3), progress, and credits on offer. When filled: short celebration, credits paid, next contract appears. No menu in between.
+5. **Order Dock.** A fixed 2x2 building with order slots (R2): one main contract slot and up to 2 side order slots. It accepts an item only if an open slot needs it; anything else stops at the dock (D9). The dock panel shows each slot (large icon from task 3), progress, and credits on offer. When the main contract is filled: short celebration, credits paid, next contract appears. No menu in between. In Phase 2 only the main slot is used; build the slot list so side orders (Phase 4) need no dock changes.
 6. **Plot expansion (D1).** Contracts marked `milestone` grow the plot. The camera eases out over about 2 seconds to show the new area and its new hoppers. Hoppers are fixed (D2) and placed by the expansion data.
-7. **Storage depots (D2, D9).** Small, medium and large depots (for example 50, 200, 1000 parts, one item type each). Parts go in from any input port and come out of the output port when there is room, so a full depot works like a hopper placed wherever you need it. The panel shows contents and fill level.
+7. **Storage depots (D2, D9, R4).** Small, medium and large depots (for example 50, 200, 1000 parts, one item type each). Parts go in from any input port and come out of the output port when there is room, so a full depot works like a hopper placed wherever you need it. The panel shows contents and fill level. A depot can be created pre-filled (item and amount) on any open tile; this is how supply drops will arrive in Phase 3. An empty pre-filled depot is just a normal depot.
 8. **Zoomed-out play.** Draw only visible tiles. Below a zoom threshold, draw belts as lines and items as dots of their color. Must hold 50 fps at the largest plot size with 1000 items.
 9. **One save (D7).** Save v3: plot size, machines, belts, items in transit, depot contents, contract index, credits, unlocks. Export and import stay. Main menu: Continue, New game, Settings, Sandbox. Delete the level select and `levels/*.json` (D4).
 
-Automatic checks: a headless run of all placeholder contracts using reference layouts in `test/fixtures/`; save, reload and continue gives the same state; depot conservation (parts in = parts stored + parts out); every item id in contracts can be made from raw materials with the machines unlocked by then; frame time check at the largest plot.
+Automatic checks: a headless run of all placeholder contracts using reference layouts in `test/fixtures/`; save, reload and continue gives the same state; depot conservation (parts in = parts stored + parts out); operation rules (Cutter and Press refuse assemblies, Encaser refuses non-shell parts, depth limit enforced, `join(a|b)` equals `join(b|a)`); every item id in contracts can be made from raw materials with the machines unlocked by then; frame time check at the largest plot.
 Human gate: Paul plays from a new game through the first expansion without opening a menu, and wants to see the next contract.
 
 **Fun checkpoint.** After Phase 2, Paul and one or two students play for 20 minutes. If it is not fun yet, fix that before adding systems. Write what was learned in `STATUS.md`.
@@ -141,7 +163,7 @@ Goal: a second thing to manage and a reason to look forward to level-ups.
 
 **Design first.** The details are being worked out in `docs/power-and-rewards.md`. The local model does not start this phase until Paul marks that document "ready to build".
 
-Likely tasks (to be confirmed by the design doc): power budget and generators, the credits shop, level-ups with a perk choice of 1 of 3, the perk list as data, power and perk tests.
+Likely tasks (to be confirmed by the design doc): power meter from the start with city supply (R6), the city cap milestone, solar and wind in the credits shop, placement blocked over the limit, level-ups with a perk choice of 1 of 3, the perk list as data, supply drops as pre-filled depots (R4), power and perk tests.
 
 ### Phase 4: Scale (M)
 
@@ -151,12 +173,13 @@ Read first: shapez `hud/parts/shop.js`, `hud/parts/statistics.js`, `production_a
 
 Tasks:
 1. **Upgrades** bought with credits (D3): Conveyor Mk2 and Mk3 (2, 4, 8 parts per second), machine speed tiers, hopper rate tiers, bigger depots.
-2. **Standing orders.** Some contracts ask for a rate ("6 per minute for 3 minutes"). The dock shows a live rate meter.
-3. **One-use boosts** bought with credits: "Overdrive: all machines 2x for 60 seconds".
-4. **Stats panel:** items per minute made and delivered for each item, last 5 minutes.
-5. **Machine card shows rates:** "Cutter: 30 in per minute, 60 out per minute". This is where ratios get taught without a lesson.
+2. **Side orders (R2, R3).** A new side order appears in a free dock slot every few minutes and expires gently after about 5 minutes. It asks for an item the player can already make, pays credits only, and never counts toward level-ups. This gives stored parts and old lines a use.
+3. **Standing orders.** Some contracts ask for a rate ("6 per minute for 3 minutes"). The dock shows a live rate meter.
+4. **One-use boosts** bought with credits: "Overdrive: all machines 2x for 60 seconds".
+5. **Stats panel:** items per minute made and delivered for each item, last 5 minutes.
+6. **Machine card shows rates:** "Cutter: 30 in per minute, 60 out per minute". This is where ratios get taught without a lesson.
 
-Automatic checks: each upgrade changes exactly what it says; rate meter accuracy against a known layout; economy simulation shows the first upgrade is affordable within 2 contracts of appearing.
+Automatic checks: each upgrade changes exactly what it says; rate meter accuracy against a known layout; economy simulation shows the first upgrade is affordable within 2 contracts of appearing; side orders never offer an item the player cannot make yet and never add level progress.
 Human gate: Paul upgrades belts and feels the factory speed up. A standing order makes him rebuild a line for more throughput.
 
 ### Phase 5: Content (Paul writes, the model builds) (L)

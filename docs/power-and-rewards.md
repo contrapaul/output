@@ -95,18 +95,15 @@ All perks are permanent for the save. A perk can be offered again if it stacks.
 **Power**
 - Free solar panel (placed wherever you click).
 - Efficient motors: one machine type uses 1 less power.
-- Bigger grid: starter grid +4.
 - Calm winds: wind turbines no longer need empty space around them.
 
 **Speed**
 - Faster machines of one type: +25% speed.
 - Faster belts in one area. (Maybe too fiddly. Possibly a global "+10% belt speed" instead.)
-- Quick start: a machine starts working on a part as soon as the first input arrives.
 
 **Supply** (fits Paul's "delivery of a limited-supply node")
 - Rich hopper: one hopper of your choice emits 50% faster.
-- Supply drop: 200 of a chosen raw material delivered straight into a depot.
-- Reserve: a limited-supply hopper refills, or stops running out (if limited hoppers exist, see section 5).
+- Supply drop: a quantity of an item from a list of level-appropriate reward items is delivered in a container to an open grid space.
 
 **Storage**
 - Bigger depots: +50% capacity.
@@ -139,7 +136,12 @@ Rules for good perks:
 
 ## 5. Questions for Paul
 
-Answered 1 to 4 (see section 6). Still open:
+Answered 1 to 4 (see section 6). Still open: 
+
+Answers: 
+5: They would not refill. Normal nodes do not run out, but have a baseline speed (which can be improved by upgrades and level-up choices) The idea is as one option for the level-up rewards a loaded storage crate/depot/container could be delivered containing a load of a specific (more valuable) part or material. This would provide a boost to production, and could mean that the player is happy to not need to build that specific item. 
+6: The story outline mentioned is what I imagined. Effectively 'we've maxed out how much power the city will give us, so we have to start making our own!' This would happen after a 'reasonable' amount of progress, but power use would be a visible (but not important) part of the UI, until it suddenly DOES become important. 
+7: 
 
 5. **Limited-supply hoppers:** your D6 answer mentions "delivery of a limited-supply node". Do some hoppers run slowly or run out? If they run out, do they refill over time?
 6. **Story:** is power part of the company story (for example, the town only gives you so much power until you build your own)? This could shape the names and the first power contract.
@@ -155,5 +157,17 @@ Decided by Paul, 2026-10-21:
 | P2 | Generators: **solar and wind only** | Power is bought with credits, never made from products. The fuel generator is dropped. Wind's spacing rule is the main spatial cost. |
 | P3 | Level-ups: **milestone contracts Paul marks** | `milestone: true` on a contract triggers the celebration, plot expansion, unlocks and perk choice. |
 | P4 | Perk offers: **smart, fixed allowed** | One offer targets the weakest area, two are random from other categories. A milestone may list its own three perks. |
+| P5 | Hoppers **never run out**. Each has a base rate that upgrades and perks can raise. | No limited hoppers. The "Rich hopper" perk stays. |
+| P6 | **Supply drop:** a container full of a level-appropriate, more valuable part arrives on an open tile. Once empty it becomes a normal depot the player keeps (roadmap R4). | Built on Phase 2's pre-filled depots. Needs a list of reward items per level in data (Paul writes it with the progression). |
+| P7 | **Power story:** the city supplies the power at first. At a milestone, "we've maxed out what the city will give us, so we have to start making our own." Power is visible but unimportant until then. | The power meter shows from the start. The cap milestone unlocks solar and wind in the shop. |
 
 Follow-up from P2: since power never connects to production, credits are the only path to more power. That makes Q2 in the roadmap (should old lines keep earning?) more important. There is one possible dead end to design out: a contract needs a new machine, the player has no free power, and has no credits for a solar panel. Two guards: (a) every contract pays out part of its credits as it fills, not only at the end, and (b) a test that simulates the cheapest path through all contracts and checks the player can always afford the power the next contract needs.
+
+
+Side orders (roadmap Q2 answer, R2, R3) also ease the dead end above: they pay credits from parts the player already makes.
+
+## 7. Still open (needed before Phase 3, not Phase 2)
+
+1. **The moment the city caps power.** Recommendation: the cap is set to the player's current demand plus a small margin, so nothing stops working at the story moment. From then on, new machines need new power. (The other choice, a fixed cap below current demand, would switch machines off, which goes against block-placement and the no-fail rule.)
+2. **Perk pool (question 7).** Section 3.4 now has your trims. Still to decide: keep "faster belts in one area" or make it global, and whether anything is missing (for example a perk that makes one machine type cost no power).
+3. **Supply drop items:** a list of reward items per level. This can wait until you write the progression.
