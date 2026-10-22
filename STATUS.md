@@ -1,6 +1,6 @@
 # Status
 Current phase: 4 (Scale) - human gate FAILED 2026-10-22; polish interlude (roadmap section 3b) comes before Phase 5
-Current task: P2 (belt and item look) built 2026-10-22, ready for human gate; P1 gate deferred to a joint review after P2
+Current task: P1/P2/P3 all built 2026-10-22, ready for one joint human gate review (Paul)
 
 Built by Claude on 2026-10-21, at Paul's request.
 
@@ -32,8 +32,19 @@ Built by Claude on 2026-10-21, at Paul's request.
 - P1 gate feedback from Paul (2026-10-22, to review together after P2):
   1. "Belt behavior is not correct" (unspecified; re-test after P2).
   2. Machines do not snap to a belt placed alongside them (machine placed after the belt: smart direction should have faced it; or the belt added next to a machine does not feed it). Carry into P1 re-review.
-- **P3 (factory atmosphere): not started.**
+- **P3 (factory atmosphere): built 2026-10-22, ready for human gate.**
+  - `src/game/art/style.js` is now the single source of every visual: `drawFactoryFloor`, `drawMachineBody/Trim/Glyph/Ports`, `drawSolar`, `drawWind`, `MACHINE_COLORS`. The renderer calls these and draws no machine/hopper/dock/floor pixels itself.
+  - Floor: painted concrete, sawcut seams, poured work area, dirt in corners/perimeter, specks and oil stains, per-lot marks (barcode stencil, bay letter, painted stall box).
+  - Machines: plate shadow, highlight/shade, rivets, item-shaped side ports with fill wedges, stall box, feet; working machines get spinning rotor, blinking lamp, work light (kept at far zoom). Hoppers: funnel + stacked item column + level window + lamp. Dock: hazard-striped platform, canopy posts, sliding crane trolley, order lamp, entrance arrow. Solar: framed cells + bolts. Wind: turning blades (frozen when motion off).
+  - All animation respects `settings.motion`; far-zoom fallbacks kept; off-screen tiles cost nothing. Power stays a text line (Q4 decision).
+  - `?art=1` review sheet now shows every machine idle|working and both generators on floor plates (`src/ui/artsheet.js`).
+  - Tests: 147 pass, `npm run build` OK.
 - Defects from the playtest (status): 1 machine drag - fixed (slop + one-step test); 2 wrong direction / keyboard rotate - fixed (autoDir + F/R); 3 belt corners - P2; 4 patch-up connect - fixed (suggestBeltDir + end-to-end test); 5 silent cutter refusal - P2 (alert, per Q4 answer).
+
+## Session 2026-10-22c (Claude): P3 factory atmosphere
+- changed: `game/src/game/art/style.js` (new floor/machine/hopper/dock/solar/wind drawing + MACHINE_COLORS moved here), `game/src/game/renderer.js` (delegates all tile art to style.js; solar/wind drawing extracted to drawSolar/drawWind), `game/src/ui/artsheet.js` (machine + generator cards).
+- tests added: none new (visual pass; covered by existing 147 + build). Human check is Paul's.
+- problems: none open.
 
 ## Session 2026-10-22b (Claude): P1 build feel
 - changed: `src/game/autoDir.js` (new), `src/game/input.js` (suggestions, DRAG_SLOP, ghost rotation rules). See Polish interlude above.

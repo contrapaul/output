@@ -17,6 +17,9 @@
 
 import { CONFIG, themeColors } from "../core/config.js";
 import { linePath } from "./beltShape.js";
+import {
+  palette, drawFactoryFloor, drawMachineBody, drawMachineTrim, drawMachineGlyph, drawMachinePorts, beltColors, shade, MACHINE_COLORS, drawSolar, drawWind,
+} from "./art/style.js";
 
 /** Direction index (0..3) of a stroke segment between two path points. */
 function dirOfPoints(a, b) {
@@ -29,22 +32,9 @@ function dirOfPoints(a, b) {
 }
 import { DIRS } from "../core/grid.js";
 import { drawItem, drawItemCached, itemColor } from "./art.js";
-import { MACHINE_NAMES, PORTS } from "./systems/process.js";
+import { MACHINE_NAMES } from "./systems/process.js";
 
 const FAR = 22; // screen px per tile below which the simple drawing is used
-
-const MACHINE_COLORS = {
-  cutter: ["#8a8a9a", "#c79a48"],
-  press: ["#a08050", "#c89040"],
-  combiner: ["#506070", "#6090c0"],
-  encaser: ["#807040", "#c0a050"],
-  merger: ["#607060", "#80a080"],
-  splitter: ["#70607a", "#a080c0"],
-  recycler: ["#4a6a62", "#50a090"],
-  depot_s: ["#6f6a60", "#8a8478"],
-  depot_m: ["#6f6a60", "#8a8478"],
-  depot_l: ["#6f6a60", "#8a8478"],
-};
 
 export class Renderer {
   constructor(canvas, camera, game) {
@@ -102,6 +92,7 @@ export class Renderer {
     const ctx = this.ctx;
     const cam = this.camera;
     const colors = themeColors(this.theme);
+    this.pal = palette(this.theme);
     const tile = CONFIG.TILE;
     this.view = cam.visibleTiles();
     this.far = tile * cam.zoom < FAR;
@@ -118,8 +109,7 @@ export class Renderer {
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.zoom, cam.zoom);
 
-    this._drawLand(ctx, colors, tile);
-    this._drawBelts(ctx, colors, tile, 0);
+    this._drawLand(ctx, colors, tile);    this._drawBelts(ctx, colors, tile, 0);
     this._drawMachines(ctx, tile);
     this._drawGenerators(ctx, tile);
     this._drawHoppers(ctx, tile);
@@ -139,26 +129,10 @@ export class Renderer {
 
   _drawLand(ctx, colors, tile) {
     const z = this.world.zone;
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(z.x * tile, z.y * tile, z.w * tile, z.h * tile);
-    if (this.far) return; // no grid lines when zoomed far out
-    const v = this.view;
-    const x0 = Math.max(z.x, v.x0);
-    const x1 = Math.min(z.x + z.w, v.x1);
-    const y0 = Math.max(z.y, v.y0);
-    const y1 = Math.min(z.y + z.h, v.y1);
-    ctx.strokeStyle = colors.grid;
-    ctx.lineWidth = 1 / this.camera.zoom;
-    ctx.beginPath();
-    for (let x = x0; x <= x1; x++) {
-      ctx.moveTo(x * tile, y0 * tile);
-      ctx.lineTo(x * tile, y1 * tile);
-    }
-    for (let y = y0; y <= y1; y++) {
-      ctx.moveTo(x0 * tile, y * tile);
-      ctx.lineTo(x1 * tile, y * tile);
-    }
-    ctx.stroke();
+    // P3: a painted concrete floor with plate seams and a hazard-striped
+    // safety boundary, not open space. The zone edge reads as the wall.
+    drawFactoryFloor(ctx, z, tile, this.pal, this.view, this.far);
+    if (this.far) return;
     ctx.strokeStyle = colors.edge;
     ctx.lineWidth = 2 / this.camera.zoom;
     ctx.strokeRect(z.x * tile, z.y * tile, z.w * tile, z.h * tile);
@@ -197,12 +171,9 @@ export class Renderer {
       const pts = linePath(line.tiles, tile);
       if (pts.length < 2) continue;
       const wBelt = tile * (z === 1 ? 0.62 : 0.7);
-      const casing = z === 1
-        ? (this.theme === "dark" ? "#2c3648" : "#6f86a8")
-        : colors.beltLine;
-      const surface = z === 1
-        ? (this.theme === "dark" ? "#3d4a63" : "#9db4d8")
-        : colors.belt;
+      const bc = beltColors(this.pal, z);
+      const casing = bc.casing;
+      const surface = bc.surface;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
@@ -216,15 +187,14 @@ export class Renderer {
       ctx.stroke();
       if (this.far) continue;
       // edge rails on the belt
-      ctx.strokeStyle = z === 1
-        ? (this.theme === "dark" ? "#7d97c4" : "#5f7ea8")
-        : casing;
+      ctx.strokeStyle = z === 1 ? shade(bc.rail, 0.2) : bc.rail;
       ctx.lineWidth = Math.max(1.5, tile * 0.045);
       ctx.stroke();
       // marching chevrons along the run
       const chev = tile * 0.16;
       const stepLen = tile * 0.9;
       const off = (motion ? march * stepLen : stepLen / 2);
+      const chevColor = z === 1 ? "#ffffff" : shade(bc.surface, -0.35);
       let acc = off;
       for (let i = 1; i < pts.length; i++) {
         const a = pts[i - 1];
@@ -235,7 +205,7 @@ export class Renderer {
           const cx = a.x + (b.x - a.x) * f;
           const cy = a.y + (b.y - a.y) * f;
           const dr = dirOfPoints(a, b);
-          this._chevron(ctx, cx, cy, dr, chev, z === 1 ? "#ffffff" : colors.beltLine, 2.5);
+          this._chevron(ctx, cx, cy, dr, chev, chevColor, 2.5);
           acc += stepLen;
         }
         acc -= segLen;
@@ -248,32 +218,7 @@ export class Renderer {
    * Outputs: a white arrow pointing out. Local sides follow rotation.
    */
   _drawPorts(ctx, type, r, px, py, tile) {
-    const ports = PORTS[type];
-    if (!ports) return;
-    const cx = px + tile / 2;
-    const cy = py + tile / 2;
-    const tri = (side, outward, fill) => {
-      const d = DIRS[(r + side) % 4];
-      const edge = tile * 0.4;
-      const s = tile * 0.1;
-      const ex = cx + d.dx * edge;
-      const ey = cy + d.dy * edge;
-      const sign = outward ? 1 : -1;
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.moveTo(ex + d.dx * s * sign, ey + d.dy * s * sign);
-      ctx.lineTo(ex - d.dy * s, ey + d.dx * s);
-      ctx.lineTo(ex + d.dy * s, ey - d.dx * s);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    };
-    if (type !== "recycler" && type !== "dock") {
-      for (const side of ports.in) tri(side, false, "rgba(255,255,255,0.55)");
-    }
-    for (const side of ports.out) tri(side, true, "#ffffff");
+    drawMachinePorts(ctx, type, r, px, py, tile);
   }
 
   _drawMachines(ctx, tile) {
@@ -297,14 +242,12 @@ export class Renderer {
         ctx.scale(k, k);
         ctx.translate(-(px + tile / 2), -(py + tile / 2));
       }
-      const bx = px + tile * 0.1;
-      const by = py + tile * 0.1;
-      const size = tile * 0.8;
-      ctx.fillStyle = busy ? busyColor : idle;
-      ctx.fillRect(bx, by, size, size);
-      ctx.strokeStyle = "rgba(0,0,0,0.3)";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(bx, by, size, size);
+      // P3: industrial body - steel panel, corner bolts, back vents, status lamp
+      drawMachineBody(ctx, px, py, tile, this.pal, idle, busyColor, state);
+      ctx.save();
+      ctx.translate(px + tile / 2, py + tile / 2);
+      drawMachineTrim(ctx, tile, this.pal, state, m.r);
+      ctx.restore();
       this._drawGlyph(ctx, m, px, py, tile);
       this._drawPorts(ctx, m.type, m.r, px, py, tile);
       ctx.restore();
@@ -329,68 +272,11 @@ export class Renderer {
 
   /** The symbol on each machine, drawn in the machine's own frame (facing r). */
   _drawGlyph(ctx, m, px, py, tile) {
-    const cx = px + tile / 2;
-    const cy = py + tile / 2;
-    const u = tile / 40; // drawn on a 40 px tile, scaled
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((m.r * Math.PI) / 2);
-    ctx.strokeStyle = "#eee";
-    ctx.fillStyle = "#eee";
-    ctx.lineWidth = 2 * u;
-    ctx.lineCap = "round";
-    const line = (pts) => {
-      ctx.beginPath();
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * u, y * u) : ctx.moveTo(x * u, y * u)));
-      ctx.stroke();
-    };
-    switch (m.type) {
-      case "cutter":
-        ctx.beginPath();
-        ctx.arc(0, 0, 8 * u, 0, Math.PI * 2);
-        ctx.fillStyle = "#d8d8e0";
-        ctx.fill();
-        line([[0, -8], [0, 8]]);
-        ctx.strokeStyle = "rgba(0,0,0,0.4)";
-        line([[0, -8], [0, 8]]);
-        break;
-      case "press":
-        ctx.fillRect(-7 * u, -9 * u, 14 * u, 5 * u);
-        line([[0, -4], [0, 2]]);
-        ctx.fillRect(-9 * u, 4 * u, 18 * u, 4 * u);
-        break;
-      case "combiner":
-        line([[-9, -8], [-2, 0]]);
-        line([[-9, 8], [-2, 0]]);
-        ctx.fillRect(-2 * u, -4 * u, 10 * u, 8 * u);
-        break;
-      case "encaser":
-        ctx.strokeRect(-8 * u, -8 * u, 16 * u, 16 * u);
-        ctx.fillRect(-4 * u, -4 * u, 8 * u, 8 * u);
-        break;
-      case "merger":
-        line([[-8, -8], [0, 0]]);
-        line([[-8, 8], [0, 0]]);
-        line([[-9, 0], [8, 0]]);
-        break;
-      case "splitter":
-        // a Y: in from the back, out left and right
-        line([[-9, 0], [0, 0]]);
-        line([[0, 0], [0, -9]]);
-        line([[0, 0], [0, 9]]);
-        break;
-      case "recycler":
-        line([[-6, -6], [6, 6]]);
-        line([[-6, 6], [6, -6]]);
-        break;
-      case "depot_s":
-      case "depot_m":
-      case "depot_l":
-        ctx.restore();
-        this._drawDepot(ctx, m, px, py, tile);
-        return;
+    if (m.type.startsWith("depot_")) {
+      this._drawDepot(ctx, m, px, py, tile);
+      return;
     }
-    ctx.restore();
+    drawMachineGlyph(ctx, px, py, tile, m.type, m.r);
   }
 
   _drawGenerators(ctx, tile) {
@@ -399,59 +285,21 @@ export class Renderer {
       const px = m.x * tile;
       const py = m.y * tile;
       if (m.t === "solar") {
-        ctx.fillStyle = "#2f4a78";
-        ctx.fillRect(px + tile * 0.08, py + tile * 0.08, tile * 0.84, tile * 0.84);
-        if (this.far) continue;
-        ctx.strokeStyle = "rgba(200,220,255,0.6)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (const k of [0.36, 0.64]) {
-          ctx.moveTo(px + tile * k, py + tile * 0.08);
-          ctx.lineTo(px + tile * k, py + tile * 0.92);
-          ctx.moveTo(px + tile * 0.08, py + tile * k);
-          ctx.lineTo(px + tile * 0.92, py + tile * k);
+        if (this.far) {
+          ctx.fillStyle = "#2f4a78";
+          ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
+          continue;
         }
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(0,0,0,0.4)";
-        ctx.strokeRect(px + tile * 0.08, py + tile * 0.08, tile * 0.84, tile * 0.84);
+        drawSolar(ctx, px, py, tile, this.pal);
         continue;
       }
       // wind turbine: base, mast and turning blades
-      const cx = px + tile / 2;
-      const cy = py + tile * 0.42;
-      ctx.fillStyle = "#cfd6dd";
       if (this.far) {
+        ctx.fillStyle = "#cfd6dd";
         ctx.fillRect(px + 4, py + 4, tile - 8, tile - 8);
         continue;
       }
-      ctx.beginPath();
-      ctx.arc(cx, py + tile * 0.85, tile * 0.14, Math.PI, 0);
-      ctx.fill();
-      ctx.strokeStyle = "#9aa4ad";
-      ctx.lineWidth = tile * 0.06;
-      ctx.beginPath();
-      ctx.moveTo(cx, py + tile * 0.85);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-      const spin = this.settings.motion ? this._t * 0.08 : 0;
-      ctx.fillStyle = "#eef2f5";
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 1;
-      for (let k = 0; k < 3; k++) {
-        const a = spin + (k * Math.PI * 2) / 3;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(a);
-        ctx.beginPath();
-        ctx.ellipse(0, -tile * 0.18, tile * 0.05, tile * 0.18, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
-      ctx.fillStyle = "#7d8790";
-      ctx.beginPath();
-      ctx.arc(cx, cy, tile * 0.05, 0, Math.PI * 2);
-      ctx.fill();
+      drawWind(ctx, px, py, tile, this.settings.motion ? this._t * 0.08 : 0);
     }
   }
 
