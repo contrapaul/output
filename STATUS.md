@@ -1,6 +1,6 @@
 # Status
-Current phase: 4 (Scale)
-Current task: built - ready for human gate
+Current phase: 4 (Scale) - human gate FAILED 2026-10-22; polish interlude (roadmap section 3b) comes before Phase 5
+Current task: P1 (build feel) built - ready for human gate
 
 Built by Claude on 2026-10-21, at Paul's request.
 
@@ -16,6 +16,27 @@ Built by Claude on 2026-10-21, at Paul's request.
 
 ## Human gate (Phase 4)
 - [ ] Paul upgrades belts and feels the factory speed up. A standing order makes him rebuild a line for more throughput. (only Paul ticks this)
+  - Not passed on 2026-10-22. Paul's playtest found build-feel and visual problems; see roadmap section 3b for his full report and the draft P1/P2/P3 polish passes. Phase 5 (his story and sequence) waits until the polish passes are done.
+
+## Polish interlude (added 2026-10-22, Paul's playtest)
+- **P1 (build feel): built 2026-10-22, ready for human gate.**
+  - New `src/game/autoDir.js`: `suggestBeltDir(world, x, y, z)` continues the one belt feeding the tile (null when ambiguous/blocked); `suggestMachineDir(world, type, x, y)` scores each facing by port fit against feeders (belts/hoppers pointing at the tile, weight 2) and followers (belts/machines that can take from it, weight 1); best effort, lowest rotation on a tie; null on an empty neighbourhood or portless type.
+  - `src/game/input.js`: `_toolTiles` uses the suggestions unless the player pressed F/R (`_ghostRotated`, set in `_rotate`, reset after a successful build); a hand rotation applies to this ghost only. `ghostDir` now also carries over after a single tap (was drags only, the stale-direction bug). DRAG_SLOP = 8 px: the path only grows once the pointer leaves the start tile, so a tap that jitters places one machine, not a row.
+  - Machine drag-to-place was already one undo step per drag (verified by test); the reported "places multiple machines" came from tap jitter, fixed by DRAG_SLOP. "Tap-drag to rotate does nothing" is fixed by F/R now driving machine facing (and beating the smart direction).
+  - Deferred by design: P1 does not touch belt corner rendering, belt size/animation, or the pressed-part alert (P2), or visuals (P3).
+- **P2 (belt and item look): not started.** Snake corners, ~70% tile-width animated belts, and the Q4 in-game alert naming why a machine refuses an item.
+- **P3 (factory atmosphere): not started.**
+- Defects from the playtest (status): 1 machine drag - fixed (slop + one-step test); 2 wrong direction / keyboard rotate - fixed (autoDir + F/R); 3 belt corners - P2; 4 patch-up connect - fixed (suggestBeltDir + end-to-end test); 5 silent cutter refusal - P2 (alert, per Q4 answer).
+
+## Session 2026-10-22b (Claude): P1 build feel
+- changed: `src/game/autoDir.js` (new), `src/game/input.js` (suggestions, DRAG_SLOP, ghost rotation rules). See Polish interlude above.
+- tests added: `test/polish-p1.test.js` (17). Full suite 134 passing. `npm run build` clean. Sanity check: stubbing the suggest functions to return null fails 8+ of the new tests, so they test real behaviour.
+- problems: none open. Human gate for P1 is Paul's.
+
+## Session 2026-10-22 (Claude): recorded Paul's playtest; no code changed
+- changed: `roadmap.md` section 3b (playtest report, defects, wishes, draft P1-P3 passes, Q4); this file.
+- tests added: none yet (each P1 defect gets a failing test when its pass starts).
+- problems: none open on the code; Phase 4 gate not passed.
 
 ## Last session (2026-10-21, Claude)
 - changed:
@@ -48,5 +69,6 @@ Built by Claude on 2026-10-21, at Paul's request.
 - [x] Automatic checks passed. [x] Human gate: Paul, 2026-10-21.
 
 ## Questions for Paul
+- P1 human check: rebuild a broken line with one tap and place a row of machines facing the right way without fighting the tool. Then P2 can start.
 - The city cap (12) and prices (solar 25, wind 80) are guesses for the placeholder contracts. Tune them in `game/data/contracts.json` and `game/data/power.json` when the real progression exists.
 - Phase 5 is next and starts with you: the product tree, names and contract sequence (any format). The engine is ready for it: everything is data.

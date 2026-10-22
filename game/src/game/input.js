@@ -28,10 +28,12 @@
 import { rotate } from "../core/grid.js";
 import { DragPath } from "./dragpath.js";
 import { planPlacement, applyPlan, piecesInArea, removePieces, isBelt } from "./build.js";
+import { suggestBeltDir, suggestMachineDir } from "./autoDir.js";
 import { History } from "./history.js";
 import { MACHINE_NAMES } from "./systems/process.js";
 
 const name = (t) => MACHINE_NAMES[t] || t;
+const DRAG_SLOP = 8; // px the pointer must travel before a drag grows the path
 
 export class Input {
   /**
@@ -100,6 +102,7 @@ export class Input {
   setTool(id) {
     this.activeTool = id;
     this.drag = null;
+    this._ghostRotated = false; // true once the player turns the ghost by hand
     if (id) this._deselect();
     this._refreshGhost();
     this.hooks.onToolChange?.(id);
@@ -131,7 +134,9 @@ export class Input {
       return;
     }
     if (this.activeTool) {
-      this.drag = { path: new DragPath(t.x, t.y, this.ghostDir) };
+      // a tap that jitters must stay one piece: the path only grows once the
+      // pointer has actually left the start (DRAG_SLOP px)
+      this.drag = { path: new DragPath(t.x, t.y, this.ghostDir), moved: false, ox: t.sx, oy: t.sy };
       this._refreshGhost();
     } else {
       this._panning = true;
@@ -158,7 +163,11 @@ export class Input {
       }
       this.renderer.setArea(this.area.moved ? this.area : null);
     }
-    if (this.drag && tileChanged) this.drag.path.moveTo(t.x, t.y);
+    if (this.drag) {
+      const away = Math.abs(t.sx - this.drag.ox) + Math.abs(t.sy - this.drag.oy);
+      if (away > DRAG_SLOP) this.drag.moved = true;
+      if (this.drag.moved && tileChanged) this.drag.path.moveTo(t.x, t.y);
+    }
     if (tileChanged) this._refreshGhost();
     this.hooks.onHover?.(this.drag || this.area ? null : this.hoverTile, t.sx, t.sy);
   }
@@ -247,8 +256,22 @@ export class Input {
 
   _toolTiles(path) {
     const tiles = path.withDirs();
-    // machines all face the ghost rotation; belts follow the path
-    return isBelt(this.activeTool) ? tiles : tiles.map((t) => ({ ...t, r: this.ghostDir }));
+    if (isBelt(this.activeTool)) {
+      // a single tapped belt joins the line it repairs (P1 defect 4) unless
+      // the player turned the ghost by hand
+      if (tiles.length === 1 && !this._ghostRotated) {
+        const d = suggestBeltDir(this.world, tiles[0].x, tiles[0].y, this.ghostZ);
+        if (d !== null) return [{ ...tiles[0], r: d }];
+      }
+      return tiles;
+    }
+    // machines face their neighbours (P1 defect 2) unless the player turned
+    // the ghost by hand (F/R always wins)
+    if (this._ghostRotated) return tiles.map((t) => ({ ...t, r: this.ghostDir }));
+    return tiles.map((t) => ({
+      ...t,
+      r: suggestMachineDir(this.world, this.activeTool, t.x, t.y) ?? this.ghostDir,
+    }));
   }
 
   _plan() {
@@ -273,8 +296,12 @@ export class Input {
     const plan = planPlacement(this.world, this.activeTool, tiles, this.ghostZ, this.game);
     const ops = applyPlan(this.game, plan);
     this.history.push(ops);
-    // the next belt starts facing the way this drag ended
-    if (isBelt(this.activeTool) && tiles.length > 1) this.ghostDir = tiles[tiles.length - 1].r;
+    // the next piece starts facing the way this one ended; a hand rotation
+    // applies to this ghost only, the next placement is smart again
+    if (ops.length) {
+      this.ghostDir = tiles[tiles.length - 1].r;
+      this._ghostRotated = false;
+    }
     const bad = plan.find((p) => p.action === "invalid");
     if (ops.length) this._changed();
     if (bad && !ops.length) this._status(`Cannot build here: ${bad.reason}.`);
@@ -322,6 +349,7 @@ export class Input {
   _rotate(times) {
     if (this.activeTool) {
       this.ghostDir = rotate(this.ghostDir, times);
+      this._ghostRotated = true;
       if (this.drag && this.drag.path.length === 1) this.drag.path.startDir = this.ghostDir;
       this._refreshGhost();
       return;

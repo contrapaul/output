@@ -19,7 +19,7 @@ This plan is written for two readers:
 - **Phase 1 (building feels good) is done** (gate passed 2026-10-21).
 - **Phase 2 (one growing factory) is built** and waiting for the human gate (see `STATUS.md`).
 - **Phase 3 (power and rewards) is built** and waiting for the human gate (see `STATUS.md`).
-- **Phase 4 (scale) is built** and waiting for the human gate (see `STATUS.md`).
+- **Phase 4 (scale) is built** and waiting for the human gate (see `STATUS.md`). Paul's first playtest (2026-10-22) did not pass the gate: build interactions and the look need a polish pass (section 3b). The polish passes come **before** Phase 5 content.
 
 **Still wrong by design (fixed in Phases 1 and 2):**
 
@@ -100,6 +100,45 @@ Q3: Updated.
 | Q1 | Should the operations be open (any part can be cut, pressed or joined, like shapez) or limited to a recipe list (like Satisfactory)? | Build the engine open, with an optional recipe list that limits which operations each machine allows. Paul chooses per machine when writing content. | Phase 2 |
 | Q2 | Once a contract is filled, extra copies of that product earn nothing. Should old lines keep earning somehow? | Yes, a small amount: the dock pays a reduced rate for any product from a past contract. Without this, old lines become dead weight. | Phase 3 |
 | Q3 | Power, level-ups and perk design | Being worked out together in `docs/power-and-rewards.md` | Phase 3 |
+
+---
+
+## 3b. Polish interlude (Paul's playtest, 2026-10-22)
+
+Paul played the Phase 4 build and did not pass its gate. His report (kept as written):
+
+> "machines cannot allow placing and dragging like belts. Machines frequently face the wrong direction, and tapping and dragging to attempt to change direction (may do nothing) results in placing multiple machines at once. The belt design needs updating to 'snake', curving when turning, rather than > awkwardly hitting ^. If you drag to build it- that works. If you delete one piece, then add a belt going the same way, it doesn't connect. I can't seem to get the pressed circles to go through a cutter. We need a polish pass or 3 before I write the story and sequence. I'd like to see belts that appear to move and are smaller than the grid squares, smarter machine directions, rotatable placement via keyboard, new designs/visuals, more of a factory feel than the sterile space it currently is- and graphics that feel more appropriate for an electronics manufacturer."
+
+### Reported defects (fix in P1, each with a regression test first)
+
+1. **Machine drag placing.** Machines do not support drag-to-place the way belts do; tap-dragging to change direction places several machines at once and often does nothing.
+2. **Machine direction is wrong on placement.** No smart orientation. Rotatable placement via keyboard is expected while placing and while a machine is selected.
+3. **Belt corners render as two straight pieces meeting at a right angle ("> hitting ^").** Corners must be drawn as one curving snake segment.
+4. **Belt repair gap.** Delete a belt, then place a new belt continuing in the same direction: the two do not connect. A newly placed belt must auto-connect to a neighbouring belt (or machine input port) that feeds it.
+5. **Pressed circles will not enter a Cutter, with no visible reason.** Current rule (`src/game/items.js:13`, `isPart`/`canCut`): "pressing is the last step for a part: a pressed part cannot be cut or pressed again". Q4 answer (Paul, 2026-10-22): **keep the rule**. Fix = the refusal must be visible: an in-game alert naming why the machine cannot process the item (P2).
+
+### Polish wishes (Paul)
+
+- Belts that appear to move (animated tread/chevrons), drawn smaller than the grid square.
+- Smarter machine directions.
+- Rotatable placement via keyboard.
+- New designs and visuals: more of a factory feel, less sterile; graphics appropriate for an electronics manufacturer.
+
+### Draft passes (for Paul to approve or reshape)
+
+- **P1: Build feel.** Items 1, 2, 4 above. Machine drag-to-place with a single ghost, F/R rotate while placing and on selection, smart default direction (face the next placed thing / dock, keep the last rotation like belts), patch-up belts connect. Failing tests first (working rules 2). **Built 2026-10-22** (`src/game/autoDir.js`, `src/game/input.js`, `test/polish-p1.test.js`, 17 tests): smart direction (feeders/followers by port fit, hand rotation with F/R always wins), 8 px drag slop so a jittery tap places one machine, patch-up belts continue the feeding belt, `ghostDir` carries over after single taps.
+- **P2: Belt and item look.** Items 3 and 5 above, plus moving belts and under-size belts: snake corners as one curve, belt width about 70% of the tile with the grid visible around it, animated tread, and the accept/reject alert from Q4: a machine that refuses an item says why on the machine, the hover card and a toast.
+- **P3: Factory atmosphere.** New visual language in `art/style.js`: floor plate with painted safety markings, grid as a painted factory floor instead of open space, industrial palette, machine bodies with bolts/grilles/status lights, an electronics-manufacturer read (PCB-green parts, copper belts, clean-room steel). Review sheet `?art=1` must cover every machine and item after the change.
+
+Each pass: automatic checks plus a short human check from Paul. Phase 5 (content) waits until P1 to P3 are done, per Paul's "before I write the story and sequence".
+
+### Open questions (new)
+
+| # | Question | Answer (Paul, 2026-10-22) | Needed by |
+|---|---|---|---|
+| Q4 | Should a pressed part be cuttable? Current data rule says pressing is terminal. | **No.** Keep the rule (`src/game/items.js`: a pressed part cannot be cut or pressed again). The game must instead show an in-game alert naming why a machine cannot process an item. | P2 |
+
+Paul also approved the pass split: **P1 / P2 / P3 as drafted is the right split.**
 
 ---
 
