@@ -1,6 +1,6 @@
 # Status
 Current phase: 4 (Scale) - human gate FAILED 2026-10-22; polish interlude (roadmap section 3b) comes before Phase 5
-Current task: P1 (build feel) built - ready for human gate
+Current task: P2 (belt and item look) built 2026-10-22, ready for human gate; P1 gate deferred to a joint review after P2
 
 Built by Claude on 2026-10-21, at Paul's request.
 
@@ -24,7 +24,14 @@ Built by Claude on 2026-10-21, at Paul's request.
   - `src/game/input.js`: `_toolTiles` uses the suggestions unless the player pressed F/R (`_ghostRotated`, set in `_rotate`, reset after a successful build); a hand rotation applies to this ghost only. `ghostDir` now also carries over after a single tap (was drags only, the stale-direction bug). DRAG_SLOP = 8 px: the path only grows once the pointer leaves the start tile, so a tap that jitters places one machine, not a row.
   - Machine drag-to-place was already one undo step per drag (verified by test); the reported "places multiple machines" came from tap jitter, fixed by DRAG_SLOP. "Tap-drag to rotate does nothing" is fixed by F/R now driving machine facing (and beating the smart direction).
   - Deferred by design: P1 does not touch belt corner rendering, belt size/animation, or the pressed-part alert (P2), or visuals (P3).
-- **P2 (belt and item look): not started.** Snake corners, ~70% tile-width animated belts, and the Q4 in-game alert naming why a machine refuses an item.
+- **P2 (belt and item look): built 2026-10-22, ready for human gate.**
+  - Snake corners: `game/src/game/beltShape.js` `linePath(tiles, tile)` builds one stroke path per flow line (head back-edge centre, tile centres at the ends and at every direction change, tail front-edge centre); `renderer._drawBelts` strokes casing + surface + rails with round joins so corners curve.
+  - Belts are narrower than the tile (0.7 tile, 0.62 overhead) so the grid shows beside them, and chevrons march with the belt when `settings.motion` is on.
+  - Q4 alert: `GameRoot.refusalReason(m, item, fromDir)` names the rule (pressed part is finished / single parts not assemblies / wrong side - turn with F / depot holds one kind / dock takes only what an open order asks for). `_checkStuckTail` fires it when the front item sits at the tail and the acceptor will never take it; `refusals` Map holds it (`refusalAt(x,y)`) for the red "!" badge (`renderer._drawRefusals`), the hover card (`main.js hoverLines`) and one toast per machine+part per 20 s (`main.js`, `machineRefusal` signal). Re-noting while the part stays stuck keeps the badge lit but does not re-toast (`said` timestamp vs `REFUSAL_QUIET` = 20 s, `REFUSAL_SHOWN` = 8 s).
+  - Tests: `test/polish-p2.test.js` (13). Full suite 147/147, `npm run build` clean.
+- P1 gate feedback from Paul (2026-10-22, to review together after P2):
+  1. "Belt behavior is not correct" (unspecified; re-test after P2).
+  2. Machines do not snap to a belt placed alongside them (machine placed after the belt: smart direction should have faced it; or the belt added next to a machine does not feed it). Carry into P1 re-review.
 - **P3 (factory atmosphere): not started.**
 - Defects from the playtest (status): 1 machine drag - fixed (slop + one-step test); 2 wrong direction / keyboard rotate - fixed (autoDir + F/R); 3 belt corners - P2; 4 patch-up connect - fixed (suggestBeltDir + end-to-end test); 5 silent cutter refusal - P2 (alert, per Q4 answer).
 

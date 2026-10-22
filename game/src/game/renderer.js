@@ -16,6 +16,17 @@
 //   colorblind  true  -> stronger item patterns, "!" on blocked machines
 
 import { CONFIG, themeColors } from "../core/config.js";
+import { linePath } from "./beltShape.js";
+
+/** Direction index (0..3) of a stroke segment between two path points. */
+function dirOfPoints(a, b) {
+  const dx = Math.sign(b.x - a.x);
+  const dy = Math.sign(b.y - a.y);
+  if (dx > 0) return 0;
+  if (dy > 0) return 1;
+  if (dx < 0) return 2;
+  return 3;
+}
 import { DIRS } from "../core/grid.js";
 import { drawItem, drawItemCached, itemColor } from "./art.js";
 import { MACHINE_NAMES, PORTS } from "./systems/process.js";
@@ -117,6 +128,7 @@ export class Renderer {
     this._drawBelts(ctx, colors, tile, 1);
     this._drawItems(ctx, tile, 1);
     this._drawWrongSides(ctx, tile);
+    this._drawRefusals(ctx, tile);
     this._drawJam(ctx, tile);
     if (this.selected) this._drawSelection(ctx, colors, tile);
     if (this.ghostPlan) this._drawGhostPlan(ctx, colors, tile);
@@ -168,28 +180,66 @@ export class Renderer {
     ctx.stroke();
   }
 
+  /**
+   * Belts as one snake strip per line (P2): a dark casing, the belt itself
+   * at ~70% of the tile (the grid shows beside it), and chevrons that march
+   * with the belt so it reads as moving. Corners curve because the whole
+   * run is one stroked path with round joins.
+   */
   _drawBelts(ctx, colors, tile, z) {
-    const type = z === 0 ? "belt" : "belt_high";
-    for (const m of this.world.machines.values()) {
-      if (m.t !== type || !this._visible(m.x, m.y)) continue;
-      const px = m.x * tile;
-      const py = m.y * tile;
-      if (z === 1) {
-        ctx.fillStyle = this.theme === "dark" ? "#3d4a63" : "#9db4d8";
-        ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
-        if (this.far) continue;
-        ctx.strokeStyle = this.theme === "dark" ? "#7d97c4" : "#5f7ea8";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(px + 2, py + 2, tile - 4, tile - 4);
-      } else {
-        ctx.fillStyle = colors.belt;
-        ctx.fillRect(px, py, tile, tile);
-        if (this.far) continue;
-        ctx.strokeStyle = colors.beltLine;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(px + 0.5, py + 0.5, tile - 1, tile - 1);
+    const motion = this.settings.motion;
+    // march in step with the items: one chevron spacing per belt tile,
+    // sliding one spacing per second of belt motion
+    const march = motion ? ((this._t / 60) % 1) : 0;
+    for (const line of this.world.lines.allLines()) {
+      if (!line.tiles.length || (line.tiles[0].z || 0) !== z) continue;
+      if (!line.tiles.some((t) => this._visible(t.x, t.y))) continue;
+      const pts = linePath(line.tiles, tile);
+      if (pts.length < 2) continue;
+      const wBelt = tile * (z === 1 ? 0.62 : 0.7);
+      const casing = z === 1
+        ? (this.theme === "dark" ? "#2c3648" : "#6f86a8")
+        : colors.beltLine;
+      const surface = z === 1
+        ? (this.theme === "dark" ? "#3d4a63" : "#9db4d8")
+        : colors.belt;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.strokeStyle = casing;
+      ctx.lineWidth = wBelt + Math.max(2, tile * 0.07);
+      ctx.stroke();
+      ctx.strokeStyle = surface;
+      ctx.lineWidth = wBelt;
+      ctx.stroke();
+      if (this.far) continue;
+      // edge rails on the belt
+      ctx.strokeStyle = z === 1
+        ? (this.theme === "dark" ? "#7d97c4" : "#5f7ea8")
+        : casing;
+      ctx.lineWidth = Math.max(1.5, tile * 0.045);
+      ctx.stroke();
+      // marching chevrons along the run
+      const chev = tile * 0.16;
+      const stepLen = tile * 0.9;
+      const off = (motion ? march * stepLen : stepLen / 2);
+      let acc = off;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+        while (acc <= segLen) {
+          const f = acc / segLen;
+          const cx = a.x + (b.x - a.x) * f;
+          const cy = a.y + (b.y - a.y) * f;
+          const dr = dirOfPoints(a, b);
+          this._chevron(ctx, cx, cy, dr, chev, z === 1 ? "#ffffff" : colors.beltLine, 2.5);
+          acc += stepLen;
+        }
+        acc -= segLen;
       }
-      this._chevron(ctx, px + tile / 2, py + tile / 2, m.r, tile * 0.18, z === 1 ? "#ffffff" : colors.beltLine, 2.5);
     }
   }
 
@@ -535,8 +585,7 @@ export class Renderer {
     });
   }
 
-  /** A red X where a belt ends against a machine side with no input. */
-  _drawWrongSides(ctx, tile) {
+  /** A red X where a belt ends against a machine side with no input. */  _drawWrongSides(ctx, tile) {
     for (const w of this.game.wrongSideEnds()) {
       const d = DIRS[w.dir];
       const cx = (w.x + 0.5 + d.dx * 0.5) * tile;
@@ -551,6 +600,32 @@ export class Renderer {
       ctx.moveTo(cx - s, cy + s);
       ctx.lineTo(cx + s, cy - s);
       ctx.stroke();
+    }
+  }
+
+  /**
+   * P2 (Q4): a machine that will not take a part shows a red "!" badge while
+   * the refusal stands. The words go to a toast and the hover card.
+   */
+  _drawRefusals(ctx, tile) {
+    if (this.far) return;
+    for (const [key] of this.game.refusals) {
+      if (key === "dock") continue;
+      const [x, y] = key.split(",").map(Number);
+      const r = this.game.refusalAt(x, y);
+      if (!r) continue;
+      const cx = (x + 0.82) * tile;
+      const cy = (y + 0.18) * tile;
+      const rad = tile * 0.16;
+      ctx.fillStyle = "#d0453a";
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(tile * 0.24)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("!", cx, cy + tile * 0.01);
     }
   }
 

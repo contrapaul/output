@@ -111,6 +111,13 @@ function attach(g, tools) {
     canUseTool: (t) => (campaign ? campaign.unlocked.has(t) : true),
   });
   input.attach();
+  // P2 (Q4): a machine that will not take a part says why, out loud.
+  game.signals.on("machineRefusal", ({ t, item, reason }) => {
+    if (refusalToasts.has(t + "|" + item)) return;
+    refusalToasts.add(t + "|" + item);
+    setTimeout(() => refusalToasts.delete(t + "|" + item), 20000);
+    toast(`${MACHINE_NAMES[t] || t}: it cannot take that`, reason);
+  });
   loop = new GameLoop({
     hz: CONFIG.SIM_HZ,
     tick: () => game.tick(),
@@ -126,6 +133,8 @@ function attach(g, tools) {
 }
 
 // short toolbar labels; the hover card and messages use the full names
+const refusalToasts = new Set(); // (t|item) -> toast once per 20 s (P2)
+
 const SHORT = { belt_high: "Overhead", depot_s: "Depot S", depot_m: "Depot M", depot_l: "Depot L", solar: "Solar", wind: "Wind", belt: "Belt" };
 
 function buildToolbar(tools) {
@@ -558,6 +567,8 @@ function hoverLines(x, y) {
       if (h.buffer) lines.push(m.stored ? `Holds ${m.buffer.length + m.outputs.length} ${itemName(m.stored)}.` : "Empty.");
       else if (m.inputs.length) lines.push(`Has ${m.inputs.map(itemName).join(", ")}.`);
       lines.push(`Now: ${STATE_TEXT[game.machineState(m)]}.`);
+      const ref = game.refusalAt(x, y);
+      if (ref) lines.push(`<span style="color:#d0453a">${ref.reason}</span>`);
     }
   }
   return lines;
