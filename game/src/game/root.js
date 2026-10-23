@@ -33,11 +33,13 @@ import { MachineInstance, HANDLERS, MACHINE_NAMES, acceptsFrom, localSide } from
 import { OrderDock } from "./systems/dock.js";
 import { Signals } from "../core/signals.js";
 import { DIRS, tileKey } from "../core/grid.js";
-import { itemName, material } from "./items.js";
+import { itemName, material, isPressed, isAssembly, depth, DEPTH_LIMIT } from "./items.js";
 import { power as powerData, upgrades as upgradeData } from "../data/index.js";
 import { RateTracker } from "./systems/rates.js";
 
 const HOPPER_RATE = 0.5; // parts per second
+const REFUSAL_QUIET = 20; // seconds before the same machine may announce the same part again
+const REFUSAL_SHOWN = 8; // seconds the on-machine alert stays up
 export const GENERATORS = powerData.generators;
 const BELTS = new Set(["belt", "belt_high"]);
 
@@ -90,6 +92,7 @@ export class GameRoot {
     this.merged = 0;
     this.delivered = 0;
     this.recycled = 0;
+    this.refusals = new Map(); // tileKey -> { item, reason, at } (P2 refusal alert)
     this.partsRemoved = 0;
     this.placedCount = 0;
     this.jam = null;
@@ -499,6 +502,67 @@ export class GameRoot {
     return h.canTake(item, m.inputs);
   }
 
+  /**
+   * Why will this machine NEVER take `item` (a rule, not a momentary jam)?
+   * Returns short grade 7 words, or null when it is only busy/blocked right
+   * now (polish pass P2, Paul's Q4 answer: pressed parts stay un-cuttable,
+   * so the game must say why out loud). Tests: test/polish-p2.test.js.
+   */
+  refusalReason(m, item, fromDir) {
+    const h = m.handler;
+    if (!h) return null;
+    const name = MACHINE_NAMES[m.type] || m.type;
+    if (h.buffer) {
+      const stored = m.stored;
+      if (stored && stored !== item) {
+        return `A ${name} holds one kind of part, and this one holds ${itemName(stored)}.`;
+      }
+      return null; // full is a jam, not a rule
+    }
+    if (!acceptsFrom(m.type, m.r, fromDir)) {
+      return `The ${name} cannot take parts from that side. Turn it with F, or run the belt to a side with an arrow pointing in.`;
+    }
+    if (h.oneEachSide && m.inputSides.includes(localSide(m.r, fromDir)) && !h.canTake(item, [])) {
+      return `The ${name} needs ${h.inText}.`;
+    }
+    if (h.canTake(item, [])) return null; // it would take one on its own: busy, not a rule
+    if (m.type === "cutter" || m.type === "press") {
+      if (isPressed(item)) return `A ${name} cannot work on a pressed part. Once a part is pressed it is finished.`;
+      if (isAssembly(item)) return `A ${name} works on single parts, not on assemblies like ${itemName(item)}.`;
+      if (depth(item) >= DEPTH_LIMIT) return `That part is already too built up to change again.`;
+    }
+    if (m.type === "encaser" && !isAssembly(item)) {
+      return `The Encaser joins a shell onto an assembly. ${itemName(item)} is a single part.`;
+    }
+    return `The ${name} takes ${h.inText}. ${itemName(item)} is not that.`;
+  }
+
+  /**
+   * Record a rule refusal and announce it, at most once per machine and part
+   * kind while it lasts (no toast spam every tick).
+   */
+  _noteRefusal(m, item, fromDir) {
+    const reason = this.refusalReason(m, item, fromDir);
+    if (!reason) return false;
+    const key = tileKey(m.x, m.y, 0);
+    const prev = this.refusals.get(key);
+    const same = prev && prev.item === item;
+    if (same) prev.at = this.time; // the part is still stuck: keep the badge lit
+    if (same && this.time - (prev.said ?? 0) < REFUSAL_QUIET) return true;
+    const rec = same ? prev : { item, reason, at: this.time };
+    rec.said = this.time;
+    this.refusals.set(key, rec);
+    this.signals.emit("machineRefusal", { x: m.x, y: m.y, t: m.type, item, reason });
+    return true;
+  }
+
+  /** A refusal still worth showing on the machine? */
+  refusalAt(x, y) {
+    const r = this.refusals.get(tileKey(x, y, 0));
+    if (!r) return null;
+    return this.time - r.at <= REFUSAL_SHOWN ? r : null;
+  }
+
   _putInto(m, item, fromDir) {
     if (m.handler.buffer) {
       m.buffer.push(item);
@@ -523,6 +587,7 @@ export class GameRoot {
     if (!a) return false;
     if (a.kind === "machine" && this._machineCanTake(a.m, item, a.fromDir)) {
       this._putInto(a.m, item, a.fromDir);
+      this.refusals.delete(tileKey(a.m.x, a.m.y, 0)); // it works now: clear the alert
       return true;
     }
     if (a.kind === "dock") return this._dockAccept(item);
@@ -559,6 +624,42 @@ export class GameRoot {
       const ejected = flowLine.step(velocity, canEject);
       for (const itemId of ejected) {
         if (!this._deliverItem(flowLine, itemId)) flowLine.requeueAtTail(itemId);
+      }
+      this._checkStuckTail(flowLine);
+    }
+  }
+
+  /**
+   * P2 (Q4): a part sitting at the tail that the acceptor will never take
+   * gets an alert naming the reason, at most once per machine and part kind.
+   */
+  _checkStuckTail(flowLine) {
+    const front = flowLine.items[flowLine.items.length - 1];
+    if (!front || front.d < flowLine.length - 1 - 0.001) return; // not at the end
+    const a = this._acceptorPast(flowLine);
+    if (!a) return;
+    const t = flowLine.line.tile(flowLine.tail);
+    const fromDir = (t.dir + 2) % 4;
+    if (a.kind === "wrongSide") {
+      const m = this.machines.get(tileKey(a.m.x, a.m.y, 0));
+      if (m) this._noteRefusal(m, front.item, fromDir);
+      return;
+    }
+    if (a.kind === "machine") {
+      if (!this._machineCanTake(a.m, front.item, a.fromDir)) this._noteRefusal(a.m, front.item, a.fromDir);
+      return;
+    }
+    if (a.kind === "dock" && this.dock && !this.dock.wants(front.item)) {
+      const key = "dock";
+      const prev = this.refusals.get(key);
+      const same = prev && prev.item === front.item;
+      const reason = "The order dock only takes what an open order asks for.";
+      const rec = same ? prev : { item: front.item, reason, at: this.time };
+      rec.at = this.time; // still stuck: keep the alert fresh for the hover card
+      if (!same || this.time - (rec.said ?? 0) >= REFUSAL_QUIET) {
+        rec.said = this.time;
+        this.refusals.set(key, rec);
+        this.signals.emit("machineRefusal", { x: this.dock.x, y: this.dock.y, t: "dock", item: front.item, reason });
       }
     }
   }
